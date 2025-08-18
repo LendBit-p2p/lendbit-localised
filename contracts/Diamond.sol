@@ -59,8 +59,8 @@ contract Diamond {
     }
 
     //immutable function example
-    function example() public pure returns (string memory) {
-        return "THIS IS AN EXAMPLE OF AN IMMUTABLE FUNCTION";
+    function version() public pure returns (string memory) {
+        return "LENDBIT EVOLUTION!!!";
     }
 
     receive() external payable {}
