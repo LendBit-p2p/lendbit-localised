@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {LibAppStorage} from "./LibAppStorage.sol";
 import "../models/Error.sol";
+import "../models/Event.sol";
 
 library LibPositionManager {
     function _createPositionFor(LibAppStorage.StorageLayout storage s, address _user) internal returns (uint256) {
@@ -13,6 +14,7 @@ library LibPositionManager {
         s._positionOwner[_positionId] = _user;
         s._ownerPosition[_user] = _positionId;
 
+        emit PositionIdCreated(_positionId, _user);
         return _positionId;
     }
 
@@ -21,5 +23,17 @@ library LibPositionManager {
             return false;
         }
         return true;
+    }
+
+    function _getNextPositionId(LibAppStorage.StorageLayout storage s) internal view returns (uint256) {
+        return s._nextPositionId + 1;
+    }
+
+    function _getPositionIdForUser(LibAppStorage.StorageLayout storage s, address _user) internal view returns (uint256) {
+        return s._ownerPosition[_user];
+    }
+
+    function _getUserForPositionId(LibAppStorage.StorageLayout storage s, uint256 _positionId) internal view returns (address) {
+        return s._positionOwner[_positionId];
     }
 }

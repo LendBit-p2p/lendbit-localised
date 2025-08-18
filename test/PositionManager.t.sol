@@ -10,6 +10,7 @@ import "forge-std/Test.sol";
 import "../contracts/Diamond.sol";
 
 import "../contracts/models/Error.sol";
+import "../contracts/models/Event.sol";
 
 contract PositionManagerTest is Test, IDiamondCut {
     //contract types of facets to be deployed
@@ -78,6 +79,50 @@ contract PositionManagerTest is Test, IDiamondCut {
 
         vm.expectRevert(abi.encodeWithSelector(ADDRESS_EXISTS.selector, _user));
         positionManagerF.createPositionFor(_user);
+    }
+
+    function testCreatePositionForEmitPositionCreatedEvent() public {
+        address _user = address(0xa);
+        vm.expectEmit(true, true, true, true);
+        emit PositionIdCreated(1, _user);
+        positionManagerF.createPositionFor(_user);
+    }
+
+    function testGetNextPositionId() public {
+        for (uint160 i = 1; i < 10; i++) {
+            positionManagerF.createPositionFor(address(i));
+        }
+
+        uint256 _nextPositionId = positionManagerF.getNextPositionId();
+        assertEq(_nextPositionId, 10);
+    }
+
+    function testGetPositionIdForUser() public {
+        for (uint160 i = 1; i < 10; i++) {
+            positionManagerF.createPositionFor(address(i));
+        }
+
+        uint256 _positionId3 = positionManagerF.getPositionIdForUser(address(3));
+        uint256 _positionId5 = positionManagerF.getPositionIdForUser(address(5));
+        uint256 _positionId10 = positionManagerF.getPositionIdForUser(address(10));
+
+        assertEq(_positionId3, 3);
+        assertEq(_positionId5, 5);
+        assertEq(_positionId10, 0);
+    }
+
+    function testGetUserForPositionId() public {
+        for (uint160 i = 1; i < 10; i++) {
+            positionManagerF.createPositionFor(address(i));
+        }
+
+        address _user3 = positionManagerF.getUserForPositionId(3);
+        address _user5 = positionManagerF.getUserForPositionId(5);
+        address _user10 = positionManagerF.getUserForPositionId(10);
+
+        assertTrue(_user3 == address(3));
+        assertTrue(_user5 == address(5));
+        assertTrue(_user10 == address(0));
     }
 
     function generateSelectors(string memory _facetName) internal returns (bytes4[] memory selectors) {
