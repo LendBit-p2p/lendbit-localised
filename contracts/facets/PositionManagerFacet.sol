@@ -4,9 +4,15 @@ pragma solidity ^0.8.30;
 import {LibAppStorage} from "../libraries/LibAppStorage.sol";
 import {LibPositionManager} from "../libraries/LibPositionManager.sol";
 
+import "../models/Error.sol";
+
 contract PositionManagerFacet {
     function createPositionFor(address _user) external returns (uint256) {
         return LibPositionManager._createPositionFor(LibAppStorage.appStorage(), _user);
+    }
+
+    function transferPositionOwnership(address _newAddress) external returns (uint256 _positionId) {
+        _positionId = LibPositionManager._transferPositionId(LibAppStorage.appStorage(), msg.sender, _newAddress);
     }
 
     // Getter functions

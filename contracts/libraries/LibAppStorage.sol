@@ -7,7 +7,6 @@ import "../models/Protocol.sol";
 library LibAppStorage {
     struct StorageLayout {
         uint256 _nextPositionId;
-        address _securityCouncil;
 
         mapping(uint256 => address) _positionOwner; // PositionID -> Owner Address
         mapping(address => uint256) _ownerPosition;   // Owner Address -> PositionID

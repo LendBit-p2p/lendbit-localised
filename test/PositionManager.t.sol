@@ -88,6 +88,42 @@ contract PositionManagerTest is Test, IDiamondCut {
         positionManagerF.createPositionFor(_user);
     }
 
+    function testTransferPositionOwnership() public {
+        address _user = address(0xdead);
+        address _newAddress = address(0xacc);
+
+        uint256 _positionId = positionManagerF.createPositionFor(_user);
+
+        vm.startPrank(_user);
+        uint256 _retainedPositionId = positionManagerF.transferPositionOwnership(_newAddress);
+
+        assertEq(_retainedPositionId, _positionId);
+        assertEq(positionManagerF.getPositionIdForUser(_newAddress), _positionId);
+        assertEq(positionManagerF.getPositionIdForUser(_user), 0);
+    }
+
+    function testTransferPositionOwnershipFailsWhenUserIsNotRegistered() public {
+        address _user = address(0xdead);
+        address _newAddress = address(0xacc);
+
+        vm.startPrank(_user);
+        vm.expectRevert(abi.encodeWithSelector(NO_POSITION_ID.selector, _user));
+        positionManagerF.transferPositionOwnership(_newAddress);
+    }
+
+    function testTransferPositionOwnershipEmitsEvent() public {
+        address _user = address(0xdead);
+        address _newAddress = address(0xacc);
+
+        uint256 _positionId = positionManagerF.createPositionFor(_user);
+
+        vm.startPrank(_user);
+        vm.expectEmit(true, true, true, true);
+        emit PositionIdTransferred(_positionId, _user, _newAddress);
+        positionManagerF.transferPositionOwnership(_newAddress);
+    }
+
+    // Getters Tests
     function testGetNextPositionId() public {
         for (uint160 i = 1; i < 10; i++) {
             positionManagerF.createPositionFor(address(i));
