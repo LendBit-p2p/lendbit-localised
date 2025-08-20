@@ -123,6 +123,32 @@ contract PositionManagerTest is Test, IDiamondCut {
         positionManagerF.transferPositionOwnership(_newAddress);
     }
 
+    function testAdminForceTransferPosition() public {
+        address _user = address(0xdead);
+        address _newAddress = address(0xacc);
+
+        uint256 _positionId = positionManagerF.createPositionFor(_user);
+
+        vm.startPrank(address(this));
+        vm.expectEmit(true, true, true, true);
+        emit PositionIdTransferred(_positionId, _user, _newAddress);
+        uint256 _retainedPositionId = positionManagerF.adminForceTransferPositionOwnership(_positionId, _newAddress);
+
+        assertEq(_retainedPositionId, _positionId);
+        assertEq(_newAddress, positionManagerF.getUserForPositionId(_retainedPositionId));
+    }
+
+    function testAdminForceTransferPositionFailsIfNotCalledByContractOwner() public {
+        address _user = address(0xdead);
+        address _newAddress = address(0xacc);
+
+        uint256 _positionId = positionManagerF.createPositionFor(_user);
+
+        vm.startPrank(address(_user));
+        vm.expectRevert(abi.encode(ONLY_SECURITY_COUNCIL.selector));
+        positionManagerF.adminForceTransferPositionOwnership(_positionId, _newAddress);
+    }
+
     // Getters Tests
     function testGetNextPositionId() public {
         for (uint160 i = 1; i < 10; i++) {

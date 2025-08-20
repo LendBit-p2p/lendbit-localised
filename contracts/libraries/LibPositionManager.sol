@@ -71,18 +71,4 @@ library LibPositionManager {
             revert NO_POSITION_ID(_user);
         }
     }
-
-    // Modifiers
-    modifier onlyUser(uint256 _positionId, address _caller) {
-        address _user = LibPositionManager._getUserForPositionId(LibAppStorage.appStorage(), _positionId);
-        if (_caller != _user) {
-            revert NO_ACCESS_TO_POSITION_ID(_caller);
-        }
-        _;
-    }
-
-    modifier onlySecurityCouncil() {
-        LibDiamond.enforceIsContractOwner();
-        _;
-    }
 }
