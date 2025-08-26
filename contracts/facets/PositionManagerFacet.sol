@@ -8,6 +8,8 @@ import {LibPositionManager} from "../libraries/LibPositionManager.sol";
 import "../models/Error.sol";
 
 contract PositionManagerFacet {
+    using LibPositionManager for LibAppStorage.StorageLayout;
+
     function createPositionFor(address _user) external returns (uint256) {
         return LibPositionManager._createPositionFor(LibAppStorage.appStorage(), _user);
     }
@@ -21,9 +23,9 @@ contract PositionManagerFacet {
         onlySecurityCouncil
         returns (uint256)
     {
-        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage(); 
-        address _user = LibPositionManager._getUserForPositionId(s, _positionId);
-        _positionId = LibPositionManager._transferPositionId(s, _user, _newAddress);
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        address _user = s._getUserForPositionId(_positionId);
+        _positionId = s._transferPositionId(_user, _newAddress);
         return _positionId;
     }
 
