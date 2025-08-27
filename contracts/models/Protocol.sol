@@ -18,6 +18,6 @@ struct FunctionResponse {
     bool exists;
     bytes32 requestId;
     bytes responses;
-    bytes errors;
+    bytes err;
     string character;
 }
