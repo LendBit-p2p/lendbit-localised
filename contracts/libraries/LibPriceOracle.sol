@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.30;
 
 import {IFunctionsRouter} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/interfaces/IFunctionsRouter.sol";
 import {IFunctionsClient} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/interfaces/IFunctionsClient.sol";
+import {IFunctionsSubscriptions} from
+    "@chainlink/contracts/src/v0.8/functions/v1_0_0/interfaces/IFunctionsSubscriptions.sol";
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol";
+import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
 
 import {LibAppStorage} from "./LibAppStorage.sol";
 
@@ -21,10 +24,30 @@ import {FunctionResponse} from "../models/Protocol.sol";
 library LibPriceOracle {
     using FunctionsRequest for FunctionsRequest.Request;
 
-    function _setupRouter(LibAppStorage.StorageLayout storage s, bytes32 _donID, address _router) internal {
+    function _initializePriceOracle(
+        LibAppStorage.StorageLayout storage s,
+        bytes32 _donID,
+        address _router,
+        address _linkToken,
+        uint32 _gasLimit,
+        uint64 _subscriptionId
+    ) internal {
+        s.s_gasLimit = _gasLimit;
+        _setupRouter(s, _donID, _router, _linkToken, _subscriptionId);
+    }
+
+    function _setupRouter(
+        LibAppStorage.StorageLayout storage s,
+        bytes32 _donID,
+        address _router,
+        address _linkToken,
+        uint64 _subscriptionId
+    ) internal {
         s.s_donID = _donID;
         s.s_router = _router;
         s.i_router = IFunctionsRouter(_router);
+        s.i_linkToken = LinkTokenInterface(_linkToken);
+        s.s_subscriptionId = _subscriptionId;
         emit FunctionsRouterChanged(msg.sender, _donID, _router);
     }
 
@@ -48,7 +71,7 @@ library LibPriceOracle {
         bytes32 _requestId =
             s.i_router.sendRequest(subscriptionId, data, FunctionsRequest.REQUEST_DATA_VERSION, callbackGasLimit, donId);
         s.s_functionResponse[_requestId] =
-            FunctionResponse({requestId: _requestId, responses: "", err: "", character: "", exists: true});
+            FunctionResponse({requestId: _requestId, responses: "", err: "", priceData: 0, exists: true});
         emit RequestSent(_requestId);
         return _requestId;
     }
@@ -70,11 +93,11 @@ library LibPriceOracle {
         }
         // Update the contract's state variables with the response and any errors
         res.responses = _response;
-        res.character = string(_response);
+        (res.priceData) = abi.decode(_response, (uint256));
         res.err = _err;
 
         // Emit an event to log the response
-        emit Response(_requestId, res.character, _response, _err);
+        emit Response(_requestId, res.priceData, _response, _err);
     }
 
     function _handleOracleFulfillment(
@@ -88,5 +111,20 @@ library LibPriceOracle {
         }
         _fulfillRequest(s, requestId, response, err);
         emit RequestFulfilled(requestId);
+    }
+
+    function _fundSubscription(LibAppStorage.StorageLayout storage s, uint256 _amount) internal {
+        // Approve the router to spend the specified amount of LINK
+        s.i_linkToken.approve(address(s.i_router), _amount);
+        // Fund the subscription
+        s.i_linkToken.transferAndCall(
+            address(s.i_router),
+            _amount,
+            abi.encode(s.s_subscriptionId) // Encode the subscription ID in the data field
+        );
+    }
+
+    function _setSubscriptionId(LibAppStorage.StorageLayout storage s, uint64 _subId) internal {
+        s.s_subscriptionId = _subId;
     }
 }

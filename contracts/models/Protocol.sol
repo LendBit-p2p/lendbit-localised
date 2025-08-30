@@ -19,5 +19,5 @@ struct FunctionResponse {
     bytes32 requestId;
     bytes responses;
     bytes err;
-    string character;
+    uint256 priceData;
 }

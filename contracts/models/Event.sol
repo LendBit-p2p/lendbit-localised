@@ -12,7 +12,7 @@ event RequestSent(bytes32 indexed id);
 
 event RequestFulfilled(bytes32 indexed id);
 
-event Response(bytes32 indexed requestId, string character, bytes response, bytes err);
+event Response(bytes32 indexed requestId, uint256 priceData, bytes response, bytes err);
 
 event FunctionsRouterChanged(address indexed securityCouncil, bytes32 donId, address router);
 

@@ -9,18 +9,24 @@ import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {LibPriceOracle} from "../libraries/LibPriceOracle.sol";
 
 contract PriceOracleFacet {
-    using FunctionsRequest for FunctionsRequest.Request;
     using LibPriceOracle for LibAppStorage.StorageLayout;
+    using FunctionsRequest for FunctionsRequest.Request;
+
+    function initializePriceOracle(bytes32 _donID, address _router, address _linkToken, uint32 _gasLimit, uint64 _subscriptionId) external {
+        LibDiamond.enforceIsContractOwner();
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        s._initializePriceOracle(_donID, _router, _linkToken, _gasLimit, _subscriptionId);
+    }
 
     /**
      * @notice setup the Chainlink router address and sets the DON ID
      * @param _donID The ID of the Decentralized Oracle Network (DON)
      * @param _router The address of the Chainlink Functions router contract
      */
-    function setupRouter(bytes32 _donID, address _router) external {
+    function setupRouter(bytes32 _donID, address _router, address _linkToken, uint64 _subscriptionId) external {
         LibDiamond.enforceIsContractOwner();
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        s._setupRouter(_donID, _router);
+        s._setupRouter(_donID, _router, _linkToken, _subscriptionId);
     }
 
     function setupSource(string calldata _source) external {
@@ -53,8 +59,37 @@ contract PriceOracleFacet {
      * @param _response The HTTP response data
      * @param _err Any errors from the Functions request
      */
-    function handleOracleFulfillment(bytes32 _requestId, bytes memory _response, bytes memory _err) internal {
+    function handleOracleFulfillment(bytes32 _requestId, bytes memory _response, bytes memory _err) external {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         s._handleOracleFulfillment(_requestId, _response, _err);
+    }
+
+    function fundSubscription(uint96 _amount) external {
+        LibDiamond.enforceIsContractOwner();
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        s._fundSubscription(_amount);
+    }
+
+    function setSubscriptionId(uint64 _subId) external {
+        LibDiamond.enforceIsContractOwner();
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        s._setSubscriptionId(_subId);
+    }
+
+    // Getter functions
+
+    function getSubscriptionId() external view returns (uint64) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s.s_subscriptionId;
+    }
+
+    function getRouterInfo() external view returns (address, bytes32) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return (s.s_router, s.s_donID);
+    }
+
+    function getSource() external view returns (string memory) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s.s_source;
     }
 }

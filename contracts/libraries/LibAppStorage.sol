@@ -2,16 +2,19 @@
 pragma solidity ^0.8.30;
 
 import {IFunctionsRouter} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/interfaces/IFunctionsRouter.sol";
+import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
 import "../models/Protocol.sol";
 
 library LibAppStorage {
     struct StorageLayout {
         IFunctionsRouter i_router;
+        LinkTokenInterface i_linkToken;
         uint256 s_nextPositionId;
         mapping(uint256 => address) s_positionOwner; // PositionID -> Owner Address
         mapping(address => uint256) s_ownerPosition; // Owner Address -> PositionID
         // Chainlink functions variables
         uint32 s_gasLimit;
+        uint64 s_subscriptionId;
         bytes32 s_donID;
         bytes32 s_lastRequestId;
         bytes s_lastResponse;
