@@ -7,6 +7,10 @@ event PositionIdTransferred(uint256 indexed positionId, address indexed oldAddre
 
 event SecurityCouncilSet(address _newCouncil);
 
+event TokenAdded(address indexed asset, address indexed assetVault);
+
+event TokenSupportChanged(address indexed asset, bool isSupported);
+
 // Chainlink functions events
 event RequestSent(bytes32 indexed id);
 
