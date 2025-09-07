@@ -11,6 +11,10 @@ event TokenAdded(address indexed asset, address indexed assetVault);
 
 event TokenSupportChanged(address indexed asset, bool isSupported);
 
+// Vault Events
+event Deposit(uint256 indexed positionId, address indexed asset, uint256 amount);
+event Withdrawal(uint256 indexed positionId, address indexed asset, uint256 amount);
+
 // Chainlink functions events
 event RequestSent(bytes32 indexed id);
 

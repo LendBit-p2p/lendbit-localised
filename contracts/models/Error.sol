@@ -11,6 +11,9 @@ error SUBSCRIPTION_ID_NOT_SET();
 error TOKEN_NOT_SUPPORTED(address _asset);
 error TOKEN_ALREADY_SUPPORTED(address _asset, address _assetVault);
 
+error AMOUNT_ZERO();
+error TRANSFER_FAILED();
+
 // chainlink functions error
 error OnlyRouterCanFulfill();
 error UnexpectedRequestID(bytes32 requestId);

@@ -134,25 +134,52 @@ contract TokenVault is ERC4626, ReentrancyGuard {
      * @param assets Amount of assets
      * @return shares Amount of shares
      */
-    function convertToShares(uint256 assets) public view override returns (uint256 shares) {
-        uint256 supply = totalSupply();
-
-        if (supply == 0) {
-            return assets; // 1:1 ratio for first deposit
-        }
-
-        uint256 rate = _getCurrentExchangeRate();
-        return (assets * 1e18) / rate;
+    function convertToShares(uint256 assets) public view override returns (uint256) {
+        return _convertToShares(assets, Math.Rounding.Floor);
     }
+    // function convertToShares(uint256 assets) public view override returns (uint256 shares) {
+    //     uint256 supply = totalSupply();
+
+    //     if (supply == 0) {
+    //         return assets; // 1:1 ratio for first deposit
+    //     }
+
+    //     uint256 rate = _getCurrentExchangeRate();
+    //     return (assets * 1e18) / rate;
+    // }
 
     /**
      * @notice Convert shares to assets based on current exchange rate
      * @param shares Amount of shares
      * @return assets Amount of assets
      */
-    function convertToAssets(uint256 shares) public view override returns (uint256 assets) {
-        uint256 rate = _getCurrentExchangeRate();
-        return (shares * rate) / 1e18;
+    function convertToAssets(uint256 shares) public view override returns (uint256) {
+        return _convertToAssets(shares, Math.Rounding.Floor);
+    }
+    // function convertToAssets(uint256 shares) public view override returns (uint256 assets) {
+    //     uint256 rate = _getCurrentExchangeRate();
+    //     return (shares * rate) / 1e18;
+    // }
+
+    function protocolDeposit(uint256 assets, address receiver)
+        public
+        onlyDiamond
+        nonReentrant
+        notPaused
+        // updateExchangeRates
+        addressZeroCheck(receiver)
+        validAmount(assets)
+        returns (uint256 shares)
+    {
+        // Calculate shares
+        shares = convertToShares(assets);
+        if (shares == 0) revert InvalidAmount();
+
+        // Mint shares to receiver
+        _mint(receiver, shares);
+
+        emit Deposit(msg.sender, receiver, assets, shares);
+        return shares;
     }
 
     /**
@@ -166,7 +193,7 @@ contract TokenVault is ERC4626, ReentrancyGuard {
         override
         nonReentrant
         notPaused
-        updateExchangeRates
+        // updateExchangeRates
         addressZeroCheck(receiver)
         validAmount(assets)
         returns (uint256 shares)
@@ -182,7 +209,7 @@ contract TokenVault is ERC4626, ReentrancyGuard {
         IERC20(asset()).safeTransfer(diamond, assets);
 
         // Notify diamond about deposit
-        IVaultManager(diamond).notifyVaultDeposit(asset(), assets, receiver, false);
+        // IVaultManager(diamond).notifyVaultDeposit(asset(), assets, receiver, false);
 
         // Mint shares to receiver
         _mint(receiver, shares);
@@ -239,7 +266,7 @@ contract TokenVault is ERC4626, ReentrancyGuard {
         public
         override
         nonReentrant
-        updateExchangeRates
+        // updateExchangeRates
         addressZeroCheck(receiver)
         addressZeroCheck(owner)
         validAmount(assets)
@@ -261,7 +288,7 @@ contract TokenVault is ERC4626, ReentrancyGuard {
         _burn(owner, shares);
 
         // Notify diamond about withdrawal - diamond will transfer assets to receiver
-        IVaultManager(diamond).notifyVaultWithdrawal(asset(), assets, receiver, true);
+        // IVaultManager(diamond).notifyVaultWithdrawal(asset(), assets, receiver, true);
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
         return shares;

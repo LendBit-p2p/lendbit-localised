@@ -17,6 +17,7 @@ library LibAppStorage {
         mapping(address => uint256) s_ownerPosition; // Owner Address -> PositionID
 
         // token related storage
+        address[] s_allSupportedTokens;
         mapping(address => bool) s_supportedToken;
         mapping(address => TokenVault) i_tokenVault;
 
