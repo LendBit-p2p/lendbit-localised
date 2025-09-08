@@ -12,7 +12,7 @@ import {LibPositionManager} from "./LibPositionManager.sol";
 
 import {TokenVault} from "../TokenVault.sol";
 
-library LibVaultManager {
+library LibLenbitVaultManager {
     using LibPositionManager for LibAppStorage.StorageLayout;
 
     function _deposit(LibAppStorage.StorageLayout storage s, address _from, address _token, uint256 _amount) internal {
@@ -21,6 +21,7 @@ library LibVaultManager {
         if (!s.s_supportedToken[_token]) revert TOKEN_NOT_SUPPORTED(_token);
         uint256 _positionId = s._getPositionIdForUser(_from);
         if (_positionId == 0) {
+        // the create position i added condition for only multisig to call but added condition on the library of ownership
             _positionId = s._createPositionFor(_from);
         }
         TokenVault _tokenVault = s.i_tokenVault[_token];
@@ -28,11 +29,14 @@ library LibVaultManager {
 
         IERC20(_token).transferFrom(_from, address(this), _amount);
 
-        _tokenVault.protocolDeposit(_amount, _from);
+        // ONLY CALL THIS FUNCTION IF USERS WANT TO DEPOSIT CNGN AS COLLATERAL THAT THE REASON FOR THE VAULT
+        // _tokenVault.protocolDeposit(_amount, _from);
 
         emit Deposit(_positionId, _token, _amount);
     }
 
+
+    // look into this function this can cause reentrancy attack so the position has state has to be updated
     function _withdraw(LibAppStorage.StorageLayout storage s, address _to, address _token, uint256 _amount) internal {
         if (_token == address(0)) revert ADDRESS_ZERO();
         if (_amount == 0) revert AMOUNT_ZERO();
@@ -42,8 +46,11 @@ library LibVaultManager {
         if (_positionId == 0) revert NO_POSITION_ID(_to);
     
         TokenVault _tokenVault = s.i_tokenVault[_token];
+
+        // so it is only cngn that can be withdraw from vault
         if (address(_tokenVault) == address(0)) revert TOKEN_NOT_SUPPORTED(_token);
 
+        // only cngn that can be withdraw from vault and other withdrawn will happen on the contract
         _tokenVault.withdraw(_amount, _to, msg.sender);
         bool success = IERC20(_token).transfer(_to, _amount);
         
@@ -52,6 +59,8 @@ library LibVaultManager {
         emit Withdrawal(_positionId, _token, _amount);
     }
 
+
+    // move the deploy vault to the ownership and remember the reason to deploy vault is for cngn 
     function _deployVault(
         LibAppStorage.StorageLayout storage s,
         address _token,

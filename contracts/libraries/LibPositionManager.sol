@@ -8,6 +8,8 @@ import "../models/Event.sol";
 
 library LibPositionManager {
     function _createPositionFor(LibAppStorage.StorageLayout storage s, address _user) internal returns (uint256) {
+        // change to multisig address can only be called by lendbit vault base on requirement
+        LibDiamond.enforceIsContractOwner();
         if (_userAddressExists(s, _user)) revert ADDRESS_EXISTS(_user);
         uint256 _positionId = s.s_nextPositionId + 1;
         s.s_nextPositionId += 1;
