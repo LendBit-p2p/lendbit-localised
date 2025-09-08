@@ -9,6 +9,9 @@ import {IVaultManager} from "./interfaces/IVaultManager.sol";
 // import {Constants} from "./utils/constants/Constant.sol";
 // import {IWeth} from "./interfaces/Iweth.sol";
 
+
+//@note alot if this function are not needed because the vault is for cng and exchange rate is gotten from cng so you can just make it cimple and basic
+
 /**
  * @title Lendbit VTokenVault
  * @author Lendbit Protocol

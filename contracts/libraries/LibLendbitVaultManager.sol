@@ -21,7 +21,7 @@ library LibLenbitVaultManager {
         if (!s.s_supportedToken[_token]) revert TOKEN_NOT_SUPPORTED(_token);
         uint256 _positionId = s._getPositionIdForUser(_from);
         if (_positionId == 0) {
-        // the create position i added condition for only multisig to call but added condition on the library of ownership
+        //@note the create position i added condition for only multisig to call but added condition on the library of ownership
             _positionId = s._createPositionFor(_from);
         }
         TokenVault _tokenVault = s.i_tokenVault[_token];
@@ -29,8 +29,8 @@ library LibLenbitVaultManager {
 
         IERC20(_token).transferFrom(_from, address(this), _amount);
 
-        // ONLY CALL THIS FUNCTION IF USERS WANT TO DEPOSIT CNGN AS COLLATERAL THAT THE REASON FOR THE VAULT
-        // _tokenVault.protocolDeposit(_amount, _from);
+        //@note ONLY CALL THIS FUNCTION IF USERS WANT TO DEPOSIT CNGN AS COLLATERAL THAT THE REASON FOR THE VAULT
+        //@note _tokenVault.protocolDeposit(_amount, _from);
 
         emit Deposit(_positionId, _token, _amount);
     }
@@ -47,10 +47,10 @@ library LibLenbitVaultManager {
     
         TokenVault _tokenVault = s.i_tokenVault[_token];
 
-        // so it is only cngn that can be withdraw from vault
+        //@note so it is only cngn that can be withdraw from vault
         if (address(_tokenVault) == address(0)) revert TOKEN_NOT_SUPPORTED(_token);
 
-        // only cngn that can be withdraw from vault and other withdrawn will happen on the contract
+        //@note only cngn that can be withdraw from vault and other withdrawn will happen on the contract
         _tokenVault.withdraw(_amount, _to, msg.sender);
         bool success = IERC20(_token).transfer(_to, _amount);
         
@@ -60,7 +60,7 @@ library LibLenbitVaultManager {
     }
 
 
-    // move the deploy vault to the ownership and remember the reason to deploy vault is for cngn 
+    //@note move the deploy vault to the ownership and remember the reason to deploy vault is for cngn 
     function _deployVault(
         LibAppStorage.StorageLayout storage s,
         address _token,
