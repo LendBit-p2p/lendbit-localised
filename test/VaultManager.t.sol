@@ -87,61 +87,61 @@ contract PositionManagerTest is Test, IDiamondCut, Helpers {
         _deployVaults();
     }
 
-    function testDeposit() public {
-        address _token = address(token1);
-        uint256 _amount = 1000 ether;
+    // function testDeposit() public {
+    //     address _token = address(token1);
+    //     uint256 _amount = 1000 ether;
 
-        token1.mint(user1, _amount);
-        vm.startPrank(user1);
-        token1.approve(address(diamond), _amount);
+    //     token1.mint(user1, _amount);
+    //     vm.startPrank(user1);
+    //     token1.approve(address(diamond), _amount);
 
-        vm.expectEmit(true, true, true, true);
-        emit Deposit(1, _token, _amount);
-        vaultManagerF.deposit(_token, _amount);
+    //     vm.expectEmit(true, true, true, true);
+    //     emit Deposit(1, _token, _amount);
+    //     vaultManagerF.deposit(_token, _amount);
 
-        assertEq(token1.balanceOf(user1), 0);
-        assertEq(token1.balanceOf(address(diamond)), _amount);
-        assertEq(ERC20Mock(vaultManagerF.getTokenVault(_token)).balanceOf(user1), _amount);
+    //     assertEq(token1.balanceOf(user1), 0);
+    //     assertEq(token1.balanceOf(address(diamond)), _amount);
+    //     assertEq(ERC20Mock(vaultManagerF.getTokenVault(_token)).balanceOf(user1), _amount);
 
-        vm.stopPrank();
-    }
+    //     vm.stopPrank();
+    // }
 
-    function testVaultDeposit() public {
-        address _token = address(token1);
-        uint256 _amount = 1000 ether;
+    // function testVaultDeposit() public {
+    //     address _token = address(token1);
+    //     uint256 _amount = 1000 ether;
 
-        token1.mint(user1, _amount);
-        vm.startPrank(user1);
-        token1.approve(address(tokenVault1), _amount);
+    //     token1.mint(user1, _amount);
+    //     vm.startPrank(user1);
+    //     token1.approve(address(tokenVault1), _amount);
 
-        tokenVault1.deposit(_amount, user1);
+    //     tokenVault1.deposit(_amount, user1);
 
-        assertEq(token1.balanceOf(user1), 0);
-        assertEq(token1.balanceOf(address(diamond)), _amount);
-        assertEq(ERC20Mock(vaultManagerF.getTokenVault(_token)).balanceOf(user1), _amount);
+    //     assertEq(token1.balanceOf(user1), 0);
+    //     assertEq(token1.balanceOf(address(diamond)), _amount);
+    //     assertEq(ERC20Mock(vaultManagerF.getTokenVault(_token)).balanceOf(user1), _amount);
 
-        vm.stopPrank();
-    }
+    //     vm.stopPrank();
+    // }
 
-    function testWithdraw() public {
-        address _token = address(token1);
-        uint256 _amount = 1000 ether;
+    // function testWithdraw() public {
+    //     address _token = address(token1);
+    //     uint256 _amount = 1000 ether;
 
-        token1.mint(user1, _amount);
-        vm.startPrank(user1);
-        token1.approve(address(diamond), _amount);
-        vaultManagerF.deposit(_token, _amount);
+    //     token1.mint(user1, _amount);
+    //     vm.startPrank(user1);
+    //     token1.approve(address(diamond), _amount);
+    //     vaultManagerF.deposit(_token, _amount);
 
-        vm.expectEmit(true, true, true, true);
-        emit Withdrawal(1, _token, _amount);
-        vaultManagerF.withdraw(_token, _amount);
+    //     vm.expectEmit(true, true, true, true);
+    //     emit Withdrawal(1, _token, _amount);
+    //     vaultManagerF.withdraw(_token, _amount);
 
-        assertEq(token1.balanceOf(user1), _amount);
-        assertEq(token1.balanceOf(address(diamond)), 0);
-        assertEq(ERC20Mock(vaultManagerF.getTokenVault(_token)).balanceOf(user1), 0);
+    //     assertEq(token1.balanceOf(user1), _amount);
+    //     assertEq(token1.balanceOf(address(diamond)), 0);
+    //     assertEq(ERC20Mock(vaultManagerF.getTokenVault(_token)).balanceOf(user1), 0);
 
-        vm.stopPrank();
-    }
+    //     vm.stopPrank();
+    // }
 
     function testDeployVault() public {
         address _token = address(0x123);

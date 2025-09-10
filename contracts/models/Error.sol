@@ -10,9 +10,13 @@ error SUBSCRIPTION_ID_NOT_SET();
 
 error TOKEN_NOT_SUPPORTED(address _asset);
 error TOKEN_ALREADY_SUPPORTED(address _asset, address _assetVault);
+error TOKEN_ALREADY_SUPPORTED_AS_COLLATERAL(address _asset);
+error TOKEN_NOT_SUPPORTED_AS_COLLATERAL(address _asset);
 
 error AMOUNT_ZERO();
 error TRANSFER_FAILED();
+error INSUFFICIENT_ALLOWANCE();
+error INSUFFICIENT_BALANCE();
 
 // chainlink functions error
 error OnlyRouterCanFulfill();

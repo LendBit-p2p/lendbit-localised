@@ -21,6 +21,12 @@ library LibAppStorage {
         mapping(address => bool) s_supportedToken;
         mapping(address => TokenVault) i_tokenVault;
 
+        // collateral tracking
+        mapping(uint256 => mapping(address => uint256)) s_positionCollateral; // PositionID -> (Token Address -> Amount)
+        mapping(address => bool) s_supportedCollateralTokens;
+        address[] s_allCollateralTokens; // list of all collateral tokens
+    
+
         // Chainlink functions variables
         uint32 s_gasLimit;
         uint64 s_subscriptionId;

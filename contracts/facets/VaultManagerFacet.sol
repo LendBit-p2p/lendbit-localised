@@ -10,15 +10,15 @@ import "../models/Error.sol";
 contract VaultManagerFacet {
     using LibVaultManager for LibAppStorage.StorageLayout;
 
-    function deposit(address _token, uint256 _amount) external {
-        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        s._deposit(msg.sender, _token, _amount);
-    }
+    // function deposit(address _token, uint256 _amount) external {
+    //     LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+    //     s._deposit(msg.sender, _token, _amount);
+    // }
 
-    function withdraw(address _token, uint256 _amount) external {
-        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        s._withdraw(msg.sender, _token, _amount);
-    }
+    // function withdraw(address _token, uint256 _amount) external {
+    //     LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+    //     s._withdraw(msg.sender, _token, _amount);
+    // }
 
     function deployVault(address _token, string calldata _name, string calldata _symbol)
         external
