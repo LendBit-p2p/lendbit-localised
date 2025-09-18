@@ -14,6 +14,22 @@ enum KYCTier {
     TIER_3
 }
 
+enum RequestStatus {
+    NONE,
+    PENDING,
+    FULFILLED,
+    REJECTED,
+    REPAID
+}
+
+struct BorrowDetails {
+    uint256 positionId;
+    string currency;
+    uint256 amount;
+    uint256 startTime; // timestamp
+    RequestStatus status;
+}
+
 struct FunctionResponse {
     bool exists;
     bytes32 requestId;

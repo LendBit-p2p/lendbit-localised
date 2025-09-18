@@ -12,6 +12,11 @@ contract PriceOracleFacet {
     using LibPriceOracle for LibAppStorage.StorageLayout;
     using FunctionsRequest for FunctionsRequest.Request;
 
+    function getPriceData(address _token) external view returns (bool, int256) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getPriceData(_token);
+    }
+
     function initializePriceOracle(bytes32 _donID, address _router, address _linkToken, uint32 _gasLimit, uint64 _subscriptionId) external {
         LibDiamond.enforceIsContractOwner();
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();

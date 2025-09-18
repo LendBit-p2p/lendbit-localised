@@ -13,17 +13,22 @@ library LibAppStorage {
         IFunctionsRouter i_router;
         LinkTokenInterface i_linkToken;
         uint256 s_nextPositionId;
+        uint256 s_nextBorrowId;
         mapping(uint256 => address) s_positionOwner; // PositionID -> Owner Address
         mapping(address => uint256) s_ownerPosition; // Owner Address -> PositionID
+        mapping(bytes32 => uint256) s_requestIdToBorrowId; // Chainlink RequestID -> BorrowID
+        mapping(uint256 => BorrowDetails) s_borrowDetails; // BorrowID -> BorrowDetails
 
         // token related storage
         address[] s_allSupportedTokens;
         mapping(address => bool) s_supportedToken;
+        mapping(address => address) s_tokenPriceFeed; // token address -> price feed address
         mapping(address => TokenVault) i_tokenVault;
 
         // collateral tracking
         mapping(uint256 => mapping(address => uint256)) s_positionCollateral; // PositionID -> (Token Address -> Amount)
         mapping(address => bool) s_supportedCollateralTokens;
+        mapping(string => bool) s_supportedLocalCurrencies;
         address[] s_allCollateralTokens; // list of all collateral tokens
     
 

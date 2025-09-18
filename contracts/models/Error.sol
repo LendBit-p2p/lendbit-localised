@@ -18,6 +18,10 @@ error TRANSFER_FAILED();
 error INSUFFICIENT_ALLOWANCE();
 error INSUFFICIENT_BALANCE();
 
+error EMPTY_STRING();
+error CURRENCY_ALREADY_SUPPORTED(string _currency);
+error CURRENCY_NOT_SUPPORTED(string _currency);
+
 // chainlink functions error
 error OnlyRouterCanFulfill();
 error UnexpectedRequestID(bytes32 requestId);

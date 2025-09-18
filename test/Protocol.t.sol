@@ -14,9 +14,9 @@ import "../contracts/Diamond.sol";
 
 import "../contracts/models/Error.sol";
 import "../contracts/models/Event.sol";
-import {Helpers} from "./Helpers.sol";
+import {Base} from "./Base.t.sol";
 
-contract ProtocolTest is Test, IDiamondCut, Helpers {
+contract ProtocolTest is Base, IDiamondCut {
     //contract types of facets to be deployed
     Diamond diamond;
     DiamondCutFacet dCutFacet;
@@ -29,6 +29,9 @@ contract ProtocolTest is Test, IDiamondCut, Helpers {
     ERC20Mock token1;
     ERC20Mock token2;
     ERC20Mock token3;
+    address pricefeed1;
+    address pricefeed2;
+    address pricefeed3;
 
     // Test addresses
     address user1 = mkaddr("user1");
@@ -90,17 +93,25 @@ contract ProtocolTest is Test, IDiamondCut, Helpers {
         DiamondLoupeFacet(address(diamond)).facetAddresses();
 
         // Deploy test tokens
-        token1 = new ERC20Mock();
-        token2 = new ERC20Mock();
-        token3 = new ERC20Mock();
+        (address _token1, address _pricefeed1) = deployERC20ContractAndAddPriceFeed("token1", 16, 1500);
+        (address _token2, address _pricefeed2) = deployERC20ContractAndAddPriceFeed("token2", 16, 300);
+        (address _token3, address _pricefeed3) = deployERC20ContractAndAddPriceFeed("token3", 6, 1);
+    
+        token1 = ERC20Mock(_token1);
+        token2 = ERC20Mock(_token2);
+        token3 = ERC20Mock(_token3);
+
+        pricefeed1 = _pricefeed1;
+        pricefeed2 = _pricefeed2;
+        pricefeed3 = _pricefeed3;
 
         // Setup initial collateral tokens
         _setupInitialCollateralTokens();
     }
     
     function _setupInitialCollateralTokens() internal {
-        protocolF.addCollateralToken(address(token1));
-        protocolF.addCollateralToken(address(token2));
+        protocolF.addCollateralToken(address(token1), pricefeed1);
+        protocolF.addCollateralToken(address(token2), pricefeed2);
     }
 
     // =============================================================
@@ -113,7 +124,7 @@ contract ProtocolTest is Test, IDiamondCut, Helpers {
         vm.expectEmit(true, false, false, false);
         emit CollateralTokenAdded(newToken);
         
-        protocolF.addCollateralToken(newToken);
+        protocolF.addCollateralToken(newToken, pricefeed1);
         
         assertTrue(protocolF.isCollateralTokenSupported(newToken));
         
@@ -133,18 +144,18 @@ contract ProtocolTest is Test, IDiamondCut, Helpers {
         
         vm.startPrank(nonAdmin);
         vm.expectRevert(abi.encodeWithSelector(ONLY_SECURITY_COUNCIL.selector));
-        protocolF.addCollateralToken(newToken);
+        protocolF.addCollateralToken(newToken, pricefeed1);
         vm.stopPrank();
     }
 
     function testAddCollateralTokenFailsForAddressZero() public {
         vm.expectRevert(abi.encodeWithSelector(ADDRESS_ZERO.selector));
-        protocolF.addCollateralToken(address(0));
+        protocolF.addCollateralToken(address(0), address(0));
     }
 
     function testAddCollateralTokenFailsIfAlreadySupported() public {
         vm.expectRevert(abi.encodeWithSelector(TOKEN_ALREADY_SUPPORTED_AS_COLLATERAL.selector, address(token1)));
-        protocolF.addCollateralToken(address(token1));
+        protocolF.addCollateralToken(address(token1), pricefeed1);
     }
 
     // =============================================================
@@ -553,14 +564,14 @@ contract ProtocolTest is Test, IDiamondCut, Helpers {
     //                       VIEW FUNCTION TESTS
     // =============================================================
 
-    function testIsCollateralTokenSupported() public {
+    function testIsCollateralTokenSupported() public view {
         assertTrue(protocolF.isCollateralTokenSupported(address(token1)));
         assertTrue(protocolF.isCollateralTokenSupported(address(token2)));
         assertFalse(protocolF.isCollateralTokenSupported(address(token3)));
         assertFalse(protocolF.isCollateralTokenSupported(address(0x999)));
     }
 
-    function testGetAllCollateralTokens() public {
+    function testGetAllCollateralTokens() public view {
         address[] memory tokens = protocolF.getAllCollateralTokens();
         
         assertEq(tokens.length, 2);
@@ -570,7 +581,7 @@ contract ProtocolTest is Test, IDiamondCut, Helpers {
 
     function testGetAllCollateralTokensAfterAddingAndRemoving() public {
         // Add a new token
-        protocolF.addCollateralToken(address(token3));
+        protocolF.addCollateralToken(address(token3), pricefeed3);
         
         address[] memory tokens = protocolF.getAllCollateralTokens();
         assertEq(tokens.length, 3);

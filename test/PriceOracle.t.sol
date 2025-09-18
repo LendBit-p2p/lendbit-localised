@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.30;
 
+import "./Base.t.sol";
 import "../contracts/interfaces/IDiamondCut.sol";
 import "../contracts/facets/DiamondCutFacet.sol";
 import "../contracts/facets/DiamondLoupeFacet.sol";
 import "../contracts/facets/OwnershipFacet.sol";
 import "../contracts/facets/PriceOracleFacet.sol";
-import "forge-std/Test.sol";
+import "../contracts/facets/ProtocolFacet.sol";
 import "../contracts/Diamond.sol";
 
 import "../contracts/models/Error.sol";
@@ -14,8 +15,10 @@ import "../contracts/models/Event.sol";
 
 import {IFunctionsSubscriptions} from
     "@chainlink/contracts/src/v0.8/functions/v1_0_0/interfaces/IFunctionsSubscriptions.sol";
+import {IFunctionsRouter} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/interfaces/IFunctionsRouter.sol";
+import {FunctionsResponse} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsResponse.sol";
 
-contract PriceOracleTest is Test, IDiamondCut {
+contract PriceOracleTest is Base, IDiamondCut {
     uint256 baseMainnetFork;
     uint256 baseSepoliaFork;
 
@@ -24,6 +27,7 @@ contract PriceOracleTest is Test, IDiamondCut {
     DiamondCutFacet dCutFacet;
     DiamondLoupeFacet dLoupe;
     OwnershipFacet ownerF;
+    ProtocolFacet protocolF;
     PriceOracleFacet priceOracleF;
 
     uint64 subscriptionId = 438;
@@ -42,6 +46,12 @@ contract PriceOracleTest is Test, IDiamondCut {
         "headers: {'API-Key': secrets.apiKey}" "})" "if (apiResponse.error) {" "console.error(apiResponse.error)"
         "throw Error('Request failed')" "}" "const { data } = apiResponse;" "return Functions.encodeString(data.data)";
 
+    address token1;
+    address token2;
+
+    address pricefeed1;
+    address pricefeed2;
+
     function setUp() public {
         baseMainnetFork = vm.createFork(vm.envString("BASE_MAINNET_URL"));
         baseSepoliaFork = vm.createFork(vm.envString("BASE_SEPOLIA_URL"));
@@ -52,12 +62,13 @@ contract PriceOracleTest is Test, IDiamondCut {
         diamond = new Diamond(address(this), address(dCutFacet));
         dLoupe = new DiamondLoupeFacet();
         ownerF = new OwnershipFacet();
+        protocolF = new ProtocolFacet();
         priceOracleF = new PriceOracleFacet();
 
         //upgrade diamond with facets
 
         //build cut struct
-        FacetCut[] memory cut = new FacetCut[](3);
+        FacetCut[] memory cut = new FacetCut[](4);
 
         cut[0] = (
             FacetCut({
@@ -77,23 +88,43 @@ contract PriceOracleTest is Test, IDiamondCut {
 
         cut[2] = (
             FacetCut({
+                facetAddress: address(protocolF),
+                action: FacetCutAction.Add,
+                functionSelectors: generateSelectors("ProtocolFacet")
+            })
+        );
+
+        cut[3] = (
+            FacetCut({
                 facetAddress: address(priceOracleF),
                 action: FacetCutAction.Add,
                 functionSelectors: generateSelectors("PriceOracleFacet")
             })
         );
 
+        protocolF = ProtocolFacet(address(diamond));
         priceOracleF = PriceOracleFacet(address(diamond));
 
         //upgrade diamond
         IDiamondCut(address(diamond)).diamondCut(cut, address(0x0), "");
 
-        //call a function
-        DiamondLoupeFacet(address(diamond)).facetAddresses();
-
         priceOracleF.initializePriceOracle(baseDonId, baseRouter, linkToken, 300000, subscriptionId);
         priceOracleF.setupSource(source);
         addContractAsConsumer();
+        deployPriceFeed();
+        addCollateralTokens();
+    }
+
+    function testGetPriceData() public view {
+        (bool _isStale, int256 _price) = priceOracleF.getPriceData(token1);
+        assertFalse(_isStale);
+        assertEq(_price, 2000 * 1e8);
+    }
+
+    function testGetPriceDataFailForUnsupportedTokens() public {
+        address _token = address(0xdead);
+        vm.expectRevert(abi.encodeWithSelector(TOKEN_NOT_SUPPORTED.selector, _token));
+        priceOracleF.getPriceData(_token);
     }
 
     function testInitialization() public view {
@@ -110,7 +141,7 @@ contract PriceOracleTest is Test, IDiamondCut {
             "url: `https://api.paycrest.io/v1/rates/${stableCoin}/100/${localCurrency}`,"
             "headers: {'API-Key': secrets.apiKey}" "})" "if (apiResponse.error) {" "console.error(apiResponse.error)"
             "throw Error('Request failed')" "}" "const { data } = apiResponse;"
-            "return Functions.encodeString(data.data)";
+            "return Functions.encodeUint256(data.data * (10**8))";
         vm.expectEmit(true, true, true, true);
         emit FunctionsSourceChanged(address(this), abi.encode(_source));
         priceOracleF.setupSource(_source);
@@ -126,12 +157,51 @@ contract PriceOracleTest is Test, IDiamondCut {
         //request character info
         bytes32 reqId = priceOracleF.sendRequest(subscriptionId, args);
         assertTrue(reqId != 0);
+
+        vm.warp(block.timestamp + 1 minutes);
+
+        // (FunctionsResponse.FulfillResult _callbackResult, uint96 _callbackCost) = IFunctionsRouter(baseRouter).fulfill(
+        //     abi.encode(150000000000),
+        //     bytes(""),
+        //     1000000000,
+        //     0,
+        //     address(this),
+        //     FunctionsResponse.Commitment({
+        //         requestId: reqId,
+        //         coordinator: address(0),
+        //         estimatedTotalCostJuels: 0,
+        //         client: address(priceOracleF),
+        //         subscriptionId: subscriptionId,
+        //         callbackGasLimit: 300000,
+        //         adminFee: 0,
+        //         donFee: 0,
+        //         gasOverheadBeforeCallback: 0,
+        //         gasOverheadAfterCallback: 0,
+        //         timeoutTimestamp: uint32(block.timestamp + 5 minutes)
+        //     })
+        // );
     }
 
     function addContractAsConsumer() internal {
         vm.startPrank(subOwner);
         IFunctionsSubscriptions(baseRouter).addConsumer(subscriptionId, address(diamond));
         vm.stopPrank();
+    }
+
+    function addCollateralTokens() internal {
+        protocolF.addCollateralToken(token1, pricefeed1);
+        protocolF.addCollateralToken(token2, pricefeed2);
+    }
+
+    function deployPriceFeed() internal {
+        (address _token1, address _pricefeed1) = deployERC20ContractAndAddPriceFeed("token1", 16, 2000);
+        (address _token2, address _pricefeed2) = deployERC20ContractAndAddPriceFeed("token2", 6, 1);
+
+        token1 = _token1;
+        token2 = _token2;
+
+        pricefeed1 = _pricefeed1;
+        pricefeed2 = _pricefeed2;
     }
 
     function generateSelectors(string memory _facetName) internal returns (bytes4[] memory selectors) {

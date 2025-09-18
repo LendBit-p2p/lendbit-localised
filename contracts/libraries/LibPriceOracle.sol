@@ -7,10 +7,11 @@ import {IFunctionsSubscriptions} from
     "@chainlink/contracts/src/v0.8/functions/v1_0_0/interfaces/IFunctionsSubscriptions.sol";
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 import {LibAppStorage} from "./LibAppStorage.sol";
 
-import {OnlyRouterCanFulfill, UnexpectedRequestID} from "../models/Error.sol";
+import {OnlyRouterCanFulfill, UnexpectedRequestID, TOKEN_NOT_SUPPORTED} from "../models/Error.sol";
 import {
     Response,
     RequestSent,
@@ -23,6 +24,20 @@ import {FunctionResponse} from "../models/Protocol.sol";
 /// @title The Chainlink Functions client contract converted into a library for the PriceOracleFacet
 library LibPriceOracle {
     using FunctionsRequest for FunctionsRequest.Request;
+
+    function _getPriceData(LibAppStorage.StorageLayout storage s, address _token)
+        internal view
+        returns (bool, int256)
+    {
+        address _pricefeed = s.s_tokenPriceFeed[_token];
+        if (_pricefeed == address(0)) revert TOKEN_NOT_SUPPORTED(_token);
+
+        (uint80 _roundId, int256 _answer,,, uint80 _answeredInRound) =
+            AggregatorV3Interface(_pricefeed).latestRoundData();
+        
+        bool _isStale = (_roundId != _answeredInRound);
+        return (_isStale, _answer);
+    }
 
     function _initializePriceOracle(
         LibAppStorage.StorageLayout storage s,

@@ -21,6 +21,9 @@ event CollateralWithdrawn(uint256 indexed positionId, address indexed token, uin
 event CollateralTokenAdded(address indexed token);
 event CollateralTokenRemoved(address indexed token);
 
+event LocalCurrencyAdded(string currency);
+event LocalCurrencyRemoved(string currency);
+
 // Chainlink functions events
 event RequestSent(bytes32 indexed id);
 

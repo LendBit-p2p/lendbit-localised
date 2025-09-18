@@ -30,13 +30,18 @@ contract ProtocolFacet {
         s._withdrawCollateral(_token, _amount);
     }
 
+    function borrowCurrency(string calldata _currency, uint256 _amount) external {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        s._borrowCurrency(_currency, _amount);
+    }
+
     /**
      * @notice Add a token as accepted collateral (only security council)
      * @param _token The token address to add as collateral
      */
-    function addCollateralToken(address _token) external onlySecurityCouncil {
+    function addCollateralToken(address _token, address _pricefeed) external onlySecurityCouncil {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        s._addCollateralToken(_token);
+        s._addCollateralToken(_token, _pricefeed);
     }
 
     /**
@@ -46,6 +51,24 @@ contract ProtocolFacet {
     function removeCollateralToken(address _token) external onlySecurityCouncil {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         s._removeCollateralToken(_token);
+    }
+
+    /**
+     * @notice Add a local currency to supported list (only security council)
+     * @param _currency The currency string to add (e.g., "NGN", "UGX", "KES", etc.)
+     */
+    function addLocalCurrency(string calldata _currency) external onlySecurityCouncil {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        s._addLocalCurrencySupport(_currency);
+    }
+
+    /**
+     * @notice Remove a local currency from supported list (only security council)
+     * @param _currency The currency string to remove
+     */
+    function removeLocalCurrency(string calldata _currency) external onlySecurityCouncil {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        s._removeLocalCurrencySupport(_currency);
     }
 
     /**
