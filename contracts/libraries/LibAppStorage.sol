@@ -19,17 +19,21 @@ library LibAppStorage {
         mapping(bytes32 => uint256) s_requestIdToBorrowId; // Chainlink RequestID -> BorrowID
         mapping(uint256 => BorrowDetails) s_borrowDetails; // BorrowID -> BorrowDetails
 
-        // token related storage
+        // borrowable token related storage
         address[] s_allSupportedTokens;
+        mapping(string => bool) s_supportedLocalCurrencies;
         mapping(address => bool) s_supportedToken;
+        mapping(string => address) s_localCurrencyToToken; // currency string -> token address
         mapping(address => address) s_tokenPriceFeed; // token address -> price feed address
         mapping(address => TokenVault) i_tokenVault;
 
         // collateral tracking
         mapping(uint256 => mapping(address => uint256)) s_positionCollateral; // PositionID -> (Token Address -> Amount)
         mapping(address => bool) s_supportedCollateralTokens;
-        mapping(string => bool) s_supportedLocalCurrencies;
         address[] s_allCollateralTokens; // list of all collateral tokens
+
+        // borrow tracking
+        mapping(uint256 => mapping(address => uint256)) s_positionBorrowed; // PositionID -> (token address -> Amount)
     
 
         // Chainlink functions variables

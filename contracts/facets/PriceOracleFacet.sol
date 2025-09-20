@@ -12,7 +12,7 @@ contract PriceOracleFacet {
     using LibPriceOracle for LibAppStorage.StorageLayout;
     using FunctionsRequest for FunctionsRequest.Request;
 
-    function getPriceData(address _token) external view returns (bool, int256) {
+    function getPriceData(address _token) external view returns (bool, uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._getPriceData(_token);
     }

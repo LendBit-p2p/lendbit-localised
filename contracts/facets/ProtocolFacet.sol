@@ -101,6 +101,26 @@ contract ProtocolFacet {
         return s.s_positionCollateral[_positionId][_token];
     }
 
+    function getPositionCollateralValue(uint256 _positionId) external view returns (uint256) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getPositionCollateralValue(_positionId);
+    }
+
+    function getPositionBorrowedValue(uint256 _positionId) external view returns (uint256) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getPositionBorrowedValue(_positionId);
+    }
+
+    function getHealthFactor(uint256 _positionId, uint256 _currentBorrowValue) external view returns (uint256) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getHealthFactor(_positionId, _currentBorrowValue);
+    }
+
+    function getTokenValueInUSD(address _token, uint256 _amount) external view returns (uint256) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getTokenValueInUSD(_token, _amount);
+    }
+
     // Modifiers
     modifier onlySecurityCouncil() {
         if (msg.sender != LibDiamond.contractOwner()) revert ONLY_SECURITY_COUNCIL();

@@ -27,7 +27,7 @@ library LibPriceOracle {
 
     function _getPriceData(LibAppStorage.StorageLayout storage s, address _token)
         internal view
-        returns (bool, int256)
+        returns (bool, uint256)
     {
         address _pricefeed = s.s_tokenPriceFeed[_token];
         if (_pricefeed == address(0)) revert TOKEN_NOT_SUPPORTED(_token);
@@ -36,7 +36,14 @@ library LibPriceOracle {
             AggregatorV3Interface(_pricefeed).latestRoundData();
         
         bool _isStale = (_roundId != _answeredInRound);
-        return (_isStale, _answer);
+        return (_isStale, uint256(_answer));
+    }
+
+    function _getPriceDecimals(LibAppStorage.StorageLayout storage s, address _token) internal view returns (uint8) {
+        address _pricefeed = s.s_tokenPriceFeed[_token];
+        if (_pricefeed == address(0)) revert TOKEN_NOT_SUPPORTED(_token);
+
+        return AggregatorV3Interface(_pricefeed).decimals();
     }
 
     function _initializePriceOracle(

@@ -22,6 +22,9 @@ error EMPTY_STRING();
 error CURRENCY_ALREADY_SUPPORTED(string _currency);
 error CURRENCY_NOT_SUPPORTED(string _currency);
 
+error STALE_PRICE_FEED(address _priceFeed);
+error INVALID_PRICE_FEED(address _priceFeed);
+
 // chainlink functions error
 error OnlyRouterCanFulfill();
 error UnexpectedRequestID(bytes32 requestId);

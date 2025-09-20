@@ -116,7 +116,7 @@ contract PriceOracleTest is Base, IDiamondCut {
     }
 
     function testGetPriceData() public view {
-        (bool _isStale, int256 _price) = priceOracleF.getPriceData(token1);
+        (bool _isStale, uint256 _price) = priceOracleF.getPriceData(token1);
         assertFalse(_isStale);
         assertEq(_price, 2000 * 1e8);
     }
