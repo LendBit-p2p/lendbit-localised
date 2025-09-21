@@ -14,6 +14,14 @@ enum KYCTier {
     TIER_3
 }
 
+struct VaultConfiguration {
+    uint256 totalDeposits;
+    uint256 totalBorrows;
+    uint256 interestRate; // in basis points
+    uint256 utilizationRate; // in basis points
+    uint256 lastUpdated; // timestamp
+}
+
 enum RequestStatus {
     NONE,
     PENDING,

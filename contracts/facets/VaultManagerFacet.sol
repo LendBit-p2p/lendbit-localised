@@ -5,28 +5,30 @@ import {LibAppStorage} from "../libraries/LibAppStorage.sol";
 import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {LibVaultManager} from "../libraries/LibVaultManager.sol";
 
+import {VaultConfiguration} from "../models/Protocol.sol";
 import "../models/Error.sol";
 
 contract VaultManagerFacet {
     using LibVaultManager for LibAppStorage.StorageLayout;
 
-    // function deposit(address _token, uint256 _amount) external {
-    //     LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-    //     s._deposit(msg.sender, _token, _amount);
-    // }
-
-    // function withdraw(address _token, uint256 _amount) external {
-    //     LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-    //     s._withdraw(msg.sender, _token, _amount);
-    // }
-
-    function deployVault(address _token, string calldata _name, string calldata _symbol)
-        external
-        onlySecurityCouncil
-        returns (address)
-    {
+    function deposit(address _token, uint256 _amount) external onlySecurityCouncil returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        return s._deployVault(_token, _name, _symbol);
+        return s._deposit(msg.sender, _token, _amount);
+    }
+
+    function withdraw(address _token, uint256 _amount) external onlySecurityCouncil {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        s._withdraw(msg.sender, _token, _amount);
+    }
+
+    function deployVault(
+        address _token,
+        string calldata _name,
+        string calldata _symbol,
+        VaultConfiguration calldata _config
+    ) external onlySecurityCouncil returns (address) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._deployVault(_token, _name, _symbol, _config);
     }
 
     function pauseTokenSupport(address _token) external onlySecurityCouncil {

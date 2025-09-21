@@ -28,6 +28,7 @@ contract TokenVault is ERC4626, ReentrancyGuard {
     error TransferNotAllowed();
     error NotWETHVault();
     error ETHTransferFailed();
+    error TransferFailed();
     error OnlyWETHContract();
 
     /// @notice Protocol diamond address
@@ -126,60 +127,7 @@ contract TokenVault is ERC4626, ReentrancyGuard {
      * @return Total amount of underlying assets
      */
     function totalAssets() public view override returns (uint256) {
-        return IVaultManager(diamond).getVaultTotalAssets(asset());
-    }
-
-    /**
-     * @notice Convert assets to shares based on current exchange rate
-     * @param assets Amount of assets
-     * @return shares Amount of shares
-     */
-    function convertToShares(uint256 assets) public view override returns (uint256) {
-        return _convertToShares(assets, Math.Rounding.Floor);
-    }
-    // function convertToShares(uint256 assets) public view override returns (uint256 shares) {
-    //     uint256 supply = totalSupply();
-
-    //     if (supply == 0) {
-    //         return assets; // 1:1 ratio for first deposit
-    //     }
-
-    //     uint256 rate = _getCurrentExchangeRate();
-    //     return (assets * 1e18) / rate;
-    // }
-
-    /**
-     * @notice Convert shares to assets based on current exchange rate
-     * @param shares Amount of shares
-     * @return assets Amount of assets
-     */
-    function convertToAssets(uint256 shares) public view override returns (uint256) {
-        return _convertToAssets(shares, Math.Rounding.Floor);
-    }
-    // function convertToAssets(uint256 shares) public view override returns (uint256 assets) {
-    //     uint256 rate = _getCurrentExchangeRate();
-    //     return (shares * rate) / 1e18;
-    // }
-
-    function protocolDeposit(uint256 assets, address receiver)
-        public
-        onlyDiamond
-        nonReentrant
-        notPaused
-        // updateExchangeRates
-        addressZeroCheck(receiver)
-        validAmount(assets)
-        returns (uint256 shares)
-    {
-        // Calculate shares
-        shares = convertToShares(assets);
-        if (shares == 0) revert InvalidAmount();
-
-        // Mint shares to receiver
-        _mint(receiver, shares);
-
-        emit Deposit(msg.sender, receiver, assets, shares);
-        return shares;
+        return IERC20(asset()).balanceOf(address(this));
     }
 
     /**
@@ -193,7 +141,6 @@ contract TokenVault is ERC4626, ReentrancyGuard {
         override
         nonReentrant
         notPaused
-        // updateExchangeRates
         addressZeroCheck(receiver)
         validAmount(assets)
         returns (uint256 shares)
@@ -205,55 +152,12 @@ contract TokenVault is ERC4626, ReentrancyGuard {
         // Transfer assets from sender to this vault
         IERC20(asset()).safeTransferFrom(msg.sender, address(this), assets);
 
-        // Transfer assets to diamond for lending
-        IERC20(asset()).safeTransfer(diamond, assets);
-
-        // Notify diamond about deposit
-        // IVaultManager(diamond).notifyVaultDeposit(asset(), assets, receiver, false);
-
         // Mint shares to receiver
         _mint(receiver, shares);
 
         emit Deposit(msg.sender, receiver, assets, shares);
         return shares;
     }
-
-    /**
-     * @notice Deposit ETH and receive shares (only for WETH vaults)
-     * @param receiver Address receiving the shares
-     * @return shares Amount of shares minted
-     */
-    // function depositETH(address receiver)
-    //     external
-    //     payable
-    //     nonReentrant
-    //     notPaused
-    //     updateExchangeRates
-    //     addressZeroCheck(receiver)
-    //     returns (uint256 shares)
-    // {
-    //     if (asset() != Constants.WETH) revert NotWETHVault();
-    //     if (msg.value == 0) revert InvalidAmount();
-
-    //     // Wrap ETH to WETH
-    //     IWeth(Constants.WETH).deposit{value: msg.value}();
-
-    //     // Calculate shares
-    //     shares = convertToShares(msg.value);
-    //     if (shares == 0) revert InvalidAmount();
-
-    //     // Transfer WETH to diamond
-    //     IERC20(Constants.WETH).safeTransfer(diamond, msg.value);
-
-    //     // Notify diamond about deposit
-    //     IVaultManager(diamond).notifyVaultDeposit(asset(), msg.value, receiver, false);
-
-    //     // Mint shares
-    //     _mint(receiver, shares);
-
-    //     emit Deposit(msg.sender, receiver, msg.value, shares);
-    //     return shares;
-    // }
 
     /**
      * @notice Withdraw ERC20 assets from the vault
@@ -266,7 +170,6 @@ contract TokenVault is ERC4626, ReentrancyGuard {
         public
         override
         nonReentrant
-        // updateExchangeRates
         addressZeroCheck(receiver)
         addressZeroCheck(owner)
         validAmount(assets)
@@ -287,57 +190,13 @@ contract TokenVault is ERC4626, ReentrancyGuard {
         // Burn shares first
         _burn(owner, shares);
 
-        // Notify diamond about withdrawal - diamond will transfer assets to receiver
-        // IVaultManager(diamond).notifyVaultWithdrawal(asset(), assets, receiver, true);
+        // Transfer assets to receiver
+        bool success = IERC20(asset()).transfer(receiver, assets);
+        if (!success) revert TransferFailed();
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
         return shares;
     }
-
-    /**
-     * @notice Withdraw ETH from WETH vault
-     * @param assets Amount of assets to withdraw
-     * @param receiver Address receiving the ETH
-     * @param owner Owner of the shares
-     * @return shares Amount of shares burned
-     */
-    // function withdrawETH(uint256 assets, address payable receiver, address owner)
-    //     external
-    //     nonReentrant
-    //     updateExchangeRates
-    //     addressZeroCheck(receiver)
-    //     addressZeroCheck(owner)
-    //     validAmount(assets)
-    //     returns (uint256 shares)
-    // {
-    //     if (asset() != Constants.WETH) revert NotWETHVault();
-
-    //     // Calculate shares
-    //     shares = convertToShares(assets);
-    //     if (shares == 0) revert InvalidAmount();
-
-    //     // Check allowance
-    //     if (msg.sender != owner) {
-    //         _spendAllowance(owner, msg.sender, shares);
-    //     }
-
-    //     // Check balance
-    //     if (balanceOf(owner) < shares) revert InsufficientShares();
-
-    //     // Burn shares
-    //     _burn(owner, shares);
-
-    //     // Notify diamond - diamond will transfer WETH back to this vault
-    //     IVaultManager(diamond).notifyVaultWithdrawal(asset(), assets, address(this), true);
-
-    //     // Unwrap WETH to ETH and send to receiver
-    //     IWeth(Constants.WETH).withdraw(assets);
-    //     (bool success,) = receiver.call{value: assets}("");
-    //     if (!success) revert ETHTransferFailed();
-
-    //     emit Withdraw(msg.sender, receiver, owner, assets, shares);
-    //     return shares;
-    // }
 
     /**
      * @notice Mint shares for a user (only diamond)
@@ -361,82 +220,6 @@ contract TokenVault is ERC4626, ReentrancyGuard {
     function burnFor(address owner, uint256 shares) external onlyDiamond addressZeroCheck(owner) validAmount(shares) {
         if (balanceOf(owner) < shares) revert InsufficientShares();
         _burn(owner, shares);
-    }
-
-    /**
-     * @notice Override transfer to notify protocol
-     * @param to Recipient address
-     * @param amount Amount to transfer
-     * @return success Whether transfer was successful
-     */
-    function transfer(address to, uint256 amount)
-        public
-        override(ERC20, IERC20)
-        nonReentrant
-        addressZeroCheck(to)
-        validAmount(amount)
-        returns (bool)
-    {
-        // Convert shares to asset amount for notification
-        uint256 assetAmount = convertToAssets(amount);
-
-        // Notify protocol about transfer
-        if (!IVaultManager(diamond).notifyVaultTransfer(asset(), assetAmount, msg.sender, to)) {
-            revert TransferNotAllowed();
-        }
-
-        return super.transfer(to, amount);
-    }
-
-    /**
-     * @notice Override transferFrom to notify protocol
-     * @param from Sender address
-     * @param to Recipient address
-     * @param amount Amount to transfer
-     * @return success Whether transfer was successful
-     */
-    function transferFrom(address from, address to, uint256 amount)
-        public
-        override(ERC20, IERC20)
-        nonReentrant
-        addressZeroCheck(from)
-        addressZeroCheck(to)
-        validAmount(amount)
-        returns (bool)
-    {
-        // Convert shares to asset amount for notification
-        uint256 assetAmount = convertToAssets(amount);
-
-        // Notify protocol about transfer
-        if (!IVaultManager(diamond).notifyVaultTransfer(asset(), assetAmount, from, to)) {
-            revert TransferNotAllowed();
-        }
-
-        return super.transferFrom(from, to, amount);
-    }
-
-    /**
-     * @notice Check if this is a WETH vault
-     * @return isWETH True if this vault handles WETH/ETH
-     */
-    // function isWETHVault() external view returns (bool) {
-    //     return asset() == Constants.WETH;
-    // }
-
-    /**
-     * @notice Get current exchange rate
-     * @return rate Current exchange rate
-     */
-    function getCurrentExchangeRate() external view returns (uint256) {
-        return _getCurrentExchangeRate();
-    }
-
-    /**
-     * @dev Receive function to handle ETH (only for WETH vaults and only from WETH contract)
-     */
-    receive() external payable {
-        // if (asset() != Constants.WETH) revert NotWETHVault();
-        // if (msg.sender != Constants.WETH) revert OnlyWETHContract();
     }
 
     // Events

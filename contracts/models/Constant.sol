@@ -7,6 +7,7 @@ library Constants {
     uint256 constant LIQUIDATION_THRESHOLD = 8000;
     uint256 constant MIN_HEALTH_FACTOR = 1;
     uint256 constant COLLATERALIZATION_RATIO = 8000;
+    uint256 constant MAX_UTILIZATION = 8000;
     address constant NATIVE_TOKEN = address(1);
 
     // Constants to avoid magic numbers

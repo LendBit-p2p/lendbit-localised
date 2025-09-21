@@ -8,16 +8,17 @@ import "../contracts/facets/DiamondCutFacet.sol";
 import "../contracts/facets/DiamondLoupeFacet.sol";
 import "../contracts/facets/OwnershipFacet.sol";
 import "../contracts/facets/VaultManagerFacet.sol";
-import "forge-std/Test.sol";
 import "../contracts/Diamond.sol";
+import {Base} from "./Base.t.sol";
 
+import "../contracts/models/Protocol.sol";
 import "../contracts/models/Error.sol";
 import "../contracts/models/Event.sol";
 
 import {TokenVault} from "../contracts/TokenVault.sol";
 import {Helpers} from "./Helpers.sol";
 
-contract PositionManagerTest is Test, IDiamondCut, Helpers {
+contract PositionManagerTest is Base, IDiamondCut {
     //contract types of facets to be deployed
     Diamond diamond;
     DiamondCutFacet dCutFacet;
@@ -36,7 +37,14 @@ contract PositionManagerTest is Test, IDiamondCut, Helpers {
 
     address user1 = mkaddr("user1");
     address user2 = mkaddr("user2");
-    
+
+    VaultConfiguration defaultConfig = VaultConfiguration({
+        totalDeposits: 0,
+        totalBorrows: 0,
+        interestRate: 500,
+        utilizationRate: 7500,
+        lastUpdated: 0
+    });
 
     function setUp() public {
         //deploy facets
@@ -87,65 +95,64 @@ contract PositionManagerTest is Test, IDiamondCut, Helpers {
         _deployVaults();
     }
 
-    // function testDeposit() public {
-    //     address _token = address(token1);
-    //     uint256 _amount = 1000 ether;
+    function testDeposit() public {
+        address _token = address(token1);
+        uint256 _amount = 1000 ether;
 
-    //     token1.mint(user1, _amount);
-    //     vm.startPrank(user1);
-    //     token1.approve(address(diamond), _amount);
+        token1.mint(address(this), _amount);
+        token1.approve(address(diamond), _amount);
 
-    //     vm.expectEmit(true, true, true, true);
-    //     emit Deposit(1, _token, _amount);
-    //     vaultManagerF.deposit(_token, _amount);
+        TokenVault tokenVault = TokenVault(payable(vaultManagerF.getTokenVault(_token)));
 
-    //     assertEq(token1.balanceOf(user1), 0);
-    //     assertEq(token1.balanceOf(address(diamond)), _amount);
-    //     assertEq(ERC20Mock(vaultManagerF.getTokenVault(_token)).balanceOf(user1), _amount);
+        vm.expectEmit(true, true, true, true);
+        emit Deposit(1, _token, _amount);
+        vaultManagerF.deposit(_token, _amount);
 
-    //     vm.stopPrank();
-    // }
+        assertEq(token1.balanceOf(user1), 0);
+        assertEq(token1.balanceOf(address(tokenVault)), _amount);
+        assertEq(ERC20Mock(vaultManagerF.getTokenVault(_token)).balanceOf(address(this)), _amount);
+    }
 
-    // function testVaultDeposit() public {
-    //     address _token = address(token1);
-    //     uint256 _amount = 1000 ether;
+    function testVaultDeposit() public {
+        address _token = address(token1);
+        uint256 _amount = 1000 ether;
 
-    //     token1.mint(user1, _amount);
-    //     vm.startPrank(user1);
-    //     token1.approve(address(tokenVault1), _amount);
+        token1.mint(user1, _amount);
+        vm.startPrank(user1);
+        token1.approve(address(tokenVault1), _amount);
 
-    //     tokenVault1.deposit(_amount, user1);
+        tokenVault1.deposit(_amount, user1);
 
-    //     assertEq(token1.balanceOf(user1), 0);
-    //     assertEq(token1.balanceOf(address(diamond)), _amount);
-    //     assertEq(ERC20Mock(vaultManagerF.getTokenVault(_token)).balanceOf(user1), _amount);
+        assertEq(token1.balanceOf(user1), 0);
+        assertEq(token1.balanceOf(address(tokenVault1)), _amount);
+        assertEq(ERC20Mock(vaultManagerF.getTokenVault(_token)).balanceOf(user1), _amount);
 
-    //     vm.stopPrank();
-    // }
+        vm.stopPrank();
+    }
 
-    // function testWithdraw() public {
-    //     address _token = address(token1);
-    //     uint256 _amount = 1000 ether;
+    function testWithdraw() public {
+        address _token = address(token1);
+        uint256 _amount = 1000 ether;
+        uint256 _halfAmount = _amount / 2;
 
-    //     token1.mint(user1, _amount);
-    //     vm.startPrank(user1);
-    //     token1.approve(address(diamond), _amount);
-    //     vaultManagerF.deposit(_token, _amount);
+        token1.mint(address(this), _amount);
+        token1.approve(address(diamond), _amount);
+        vaultManagerF.deposit(_token, _amount);
 
-    //     vm.expectEmit(true, true, true, true);
-    //     emit Withdrawal(1, _token, _amount);
-    //     vaultManagerF.withdraw(_token, _amount);
+        tokenVault1.approve(address(diamond), _halfAmount);
 
-    //     assertEq(token1.balanceOf(user1), _amount);
-    //     assertEq(token1.balanceOf(address(diamond)), 0);
-    //     assertEq(ERC20Mock(vaultManagerF.getTokenVault(_token)).balanceOf(user1), 0);
+        vm.expectEmit(true, true, true, true);
+        emit Withdrawal(1, _token, _halfAmount);
+        vaultManagerF.withdraw(_token, _halfAmount);
 
-    //     vm.stopPrank();
-    // }
+        assertEq(token1.balanceOf(address(this)), _halfAmount);
+        assertEq(token1.balanceOf(address(tokenVault1)), _halfAmount);
+        assertEq(tokenVault1.balanceOf(address(this)), _halfAmount);
+    }
 
     function testDeployVault() public {
         address _token = address(0x123);
-        address _tokenVault = vaultManagerF.deployVault(_token, "Test token", "TesT");
+        address _tokenVault = vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
         assertTrue(vaultManagerF.tokenIsSupported(_token));
         assertEq(_tokenVault, vaultManagerF.getTokenVault(_token));
     }
@@ -154,19 +161,19 @@ contract PositionManagerTest is Test, IDiamondCut, Helpers {
         address _token = address(0x123);
         vm.expectEmit(true, false, true, true);
         emit TokenAdded(_token, address(0));
-        vaultManagerF.deployVault(_token, "Test token", "TesT");
+        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
     }
 
     function testOnlyContractOwnerCanDeployVault() public {
         address _token = address(0x123);
         vm.startPrank(linkHolder);
         vm.expectRevert(abi.encodeWithSelector(ONLY_SECURITY_COUNCIL.selector));
-        vaultManagerF.deployVault(_token, "Test token", "TesT");
+        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
     }
 
     function testPauseTokenSupport() public {
         address _token = address(0x123);
-        vaultManagerF.deployVault(_token, "Test token", "TesT");
+        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
 
         vaultManagerF.pauseTokenSupport(_token);
         assertFalse(vaultManagerF.tokenIsSupported(_token));
@@ -174,7 +181,7 @@ contract PositionManagerTest is Test, IDiamondCut, Helpers {
 
     function testOnlyContractOwnerCanPauseTokenSupport() public {
         address _token = address(0x123);
-        vaultManagerF.deployVault(_token, "Test token", "TesT");
+        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
 
         vm.startPrank(linkHolder);
         vm.expectRevert(abi.encodeWithSelector(ONLY_SECURITY_COUNCIL.selector));
@@ -183,7 +190,7 @@ contract PositionManagerTest is Test, IDiamondCut, Helpers {
 
     function testResumeTokenSupport() public {
         address _token = address(0x123);
-        vaultManagerF.deployVault(_token, "Test token", "TesT");
+        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
         vaultManagerF.pauseTokenSupport(_token);
 
         vaultManagerF.resumeTokenSupport(_token);
@@ -192,7 +199,7 @@ contract PositionManagerTest is Test, IDiamondCut, Helpers {
 
     function testOnlyContractOwnerCanResumeTokenSupport() public {
         address _token = address(0x123);
-        vaultManagerF.deployVault(_token, "Test token", "TesT");
+        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
         vaultManagerF.pauseTokenSupport(_token);
 
         vm.startPrank(linkHolder);
@@ -212,7 +219,7 @@ contract PositionManagerTest is Test, IDiamondCut, Helpers {
     function testCannotAddAddressZeroAsSupportedToken() public {
         address _token = address(0);
         vm.expectRevert(abi.encodeWithSelector(ADDRESS_ZERO.selector));
-        vaultManagerF.deployVault(_token, "Test token", "TesT");
+        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
     }
 
     function testCannotPauseAddressZeroAsSupportedToken() public {
@@ -229,24 +236,24 @@ contract PositionManagerTest is Test, IDiamondCut, Helpers {
 
     function testCannotDeployVaultMultipleTimesForSameToken() public {
         address _token = address(0x123);
-        address _vaultToken = vaultManagerF.deployVault(_token, "Test token", "TesT");
+        address _vaultToken = vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
 
         vm.expectRevert(abi.encodeWithSelector(TOKEN_ALREADY_SUPPORTED.selector, _token, _vaultToken));
-        vaultManagerF.deployVault(_token, "Diff name", "Diff");
+        vaultManagerF.deployVault(_token, "Diff name", "Diff", defaultConfig);
     }
 
     function testCannotDeployVaultForTokensWithPausedSupport() public {
         address _token = address(0x123);
-        address _vaultToken = vaultManagerF.deployVault(_token, "Test token", "TesT");
+        address _vaultToken = vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
         vaultManagerF.pauseTokenSupport(_token);
 
         vm.expectRevert(abi.encodeWithSelector(TOKEN_ALREADY_SUPPORTED.selector, _token, _vaultToken));
-        vaultManagerF.deployVault(_token, "Diff name", "Diff");
+        vaultManagerF.deployVault(_token, "Diff name", "Diff", defaultConfig);
     }
 
     function _deployVaults() internal {
-        tokenVault1 = TokenVault(payable(vaultManagerF.deployVault(address(token1), "Hodl Dai", "HDAI")));
-        tokenVault2 = TokenVault(payable(vaultManagerF.deployVault(address(token2), "Hodl Xai", "HXAI")));
+        tokenVault1 = TokenVault(payable(vaultManagerF.deployVault(address(token1), "Hodl Dai", "HDAI", defaultConfig)));
+        tokenVault2 = TokenVault(payable(vaultManagerF.deployVault(address(token2), "Hodl Xai", "HXAI", defaultConfig)));
     }
 
     function _deployErc20Tokens() internal {

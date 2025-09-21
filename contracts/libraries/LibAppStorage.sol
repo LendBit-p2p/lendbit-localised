@@ -26,6 +26,7 @@ library LibAppStorage {
         mapping(string => address) s_localCurrencyToToken; // currency string -> token address
         mapping(address => address) s_tokenPriceFeed; // token address -> price feed address
         mapping(address => TokenVault) i_tokenVault;
+        mapping(address => VaultConfiguration) s_tokenVaultConfig; // token address -> vault config
 
         // collateral tracking
         mapping(uint256 => mapping(address => uint256)) s_positionCollateral; // PositionID -> (Token Address -> Amount)
