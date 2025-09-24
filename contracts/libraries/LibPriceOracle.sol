@@ -10,8 +10,15 @@ import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interface
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 import {LibAppStorage} from "./LibAppStorage.sol";
+import {LibUtils} from "./LibUtils.sol";
 
-import {OnlyRouterCanFulfill, UnexpectedRequestID, TOKEN_NOT_SUPPORTED} from "../models/Error.sol";
+import {
+    OnlyRouterCanFulfill,
+    UnexpectedRequestID,
+    TOKEN_NOT_SUPPORTED,
+    STALE_PRICE_FEED,
+    INVALID_PRICE_FEED
+} from "../models/Error.sol";
 import {
     Response,
     RequestSent,
@@ -21,12 +28,15 @@ import {
 } from "../models/Event.sol";
 import {FunctionResponse} from "../models/Protocol.sol";
 
+import {Constants} from "../models/Constant.sol";
+
 /// @title The Chainlink Functions client contract converted into a library for the PriceOracleFacet
 library LibPriceOracle {
     using FunctionsRequest for FunctionsRequest.Request;
 
     function _getPriceData(LibAppStorage.StorageLayout storage s, address _token)
-        internal view
+        internal
+        view
         returns (bool, uint256)
     {
         address _pricefeed = s.s_tokenPriceFeed[_token];
@@ -34,7 +44,7 @@ library LibPriceOracle {
 
         (uint80 _roundId, int256 _answer,,, uint80 _answeredInRound) =
             AggregatorV3Interface(_pricefeed).latestRoundData();
-        
+
         bool _isStale = (_roundId != _answeredInRound);
         return (_isStale, uint256(_answer));
     }
@@ -44,6 +54,36 @@ library LibPriceOracle {
         if (_pricefeed == address(0)) revert TOKEN_NOT_SUPPORTED(_token);
 
         return AggregatorV3Interface(_pricefeed).decimals();
+    }
+
+    function _getTokenValueInUSD(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount)
+        internal
+        view
+        returns (uint256, uint256)
+    {
+        if (_amount == 0) return (0, 0);
+
+        (bool _isStale, uint256 _price) = _getPriceData(s, _token);
+        if (_isStale) revert STALE_PRICE_FEED(_token);
+        if (_price <= 0) revert INVALID_PRICE_FEED(_token);
+
+        // Normalize to 10 decimals
+        // uint8 _decimals = _getPriceDecimals(s, _token);
+        uint8 _decimals = LibUtils._getTokenDecimals(_token);
+        uint256 _usdValue = _calculateTokenUSDEquivalent(_decimals, _price, _amount);
+
+        return (_price, _usdValue);
+    }
+
+    function _calculateTokenUSDEquivalent(uint8 _decimals, uint256 _price, uint256 _amount)
+        internal
+        pure
+        returns (uint256 _usdValue)
+    {
+        if (_amount == 0) return _usdValue;
+        // _usdValue = (_price * Constants.PRICE_PRECISION * _amount) / (10 ** _decimals);
+        uint256 scaledPrice = _price * (10 ** (Constants.PRECISION_SCALE - 8)); // e.g., 1e10 if PRECISION is 1e18
+        _usdValue = (scaledPrice * _amount) / (10 ** _decimals);
     }
 
     function _initializePriceOracle(

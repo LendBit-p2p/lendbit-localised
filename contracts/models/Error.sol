@@ -17,6 +17,9 @@ error AMOUNT_ZERO();
 error TRANSFER_FAILED();
 error INSUFFICIENT_ALLOWANCE();
 error INSUFFICIENT_BALANCE();
+error HEALTH_FACTOR_TOO_LOW(uint256 _healthFactor);
+
+error TOKEN_OVERUTILIZATION();
 
 error EMPTY_STRING();
 error CURRENCY_ALREADY_SUPPORTED(string _currency);

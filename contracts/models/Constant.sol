@@ -4,8 +4,9 @@ pragma solidity ^0.8.30;
 /// @dev Holds all the constant for our protocol
 library Constants {
     uint256 constant PRECISION = 1E18;
+    uint256 constant PRICE_PRECISION = 1E10;
     uint256 constant LIQUIDATION_THRESHOLD = 8000;
-    uint256 constant MIN_HEALTH_FACTOR = 1;
+    uint256 constant MIN_HEALTH_FACTOR = 1E18;
     uint256 constant COLLATERALIZATION_RATIO = 8000;
     uint256 constant MAX_UTILIZATION = 8000;
     address constant NATIVE_TOKEN = address(1);

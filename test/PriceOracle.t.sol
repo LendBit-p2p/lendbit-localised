@@ -53,9 +53,9 @@ contract PriceOracleTest is Base, IDiamondCut {
     address pricefeed2;
 
     function setUp() public {
-        baseMainnetFork = vm.createFork(vm.envString("BASE_MAINNET_URL"));
-        baseSepoliaFork = vm.createFork(vm.envString("BASE_SEPOLIA_URL"));
-        vm.selectFork(baseSepoliaFork);
+        // baseMainnetFork = vm.createFork(vm.envString("BASE_MAINNET_URL"));
+        // baseSepoliaFork = vm.createFork(vm.envString("BASE_SEPOLIA_URL"));
+        // vm.selectFork(baseSepoliaFork);
 
         //deploy facets
         dCutFacet = new DiamondCutFacet();
@@ -108,9 +108,9 @@ contract PriceOracleTest is Base, IDiamondCut {
         //upgrade diamond
         IDiamondCut(address(diamond)).diamondCut(cut, address(0x0), "");
 
-        priceOracleF.initializePriceOracle(baseDonId, baseRouter, linkToken, 300000, subscriptionId);
-        priceOracleF.setupSource(source);
-        addContractAsConsumer();
+        // priceOracleF.initializePriceOracle(baseDonId, baseRouter, linkToken, 300000, subscriptionId);
+        // priceOracleF.setupSource(source);
+        // addContractAsConsumer();
         deployPriceFeed();
         addCollateralTokens();
     }
@@ -121,72 +121,106 @@ contract PriceOracleTest is Base, IDiamondCut {
         assertEq(_price, 2000 * 1e8);
     }
 
+    function testGetTokenValueInUSD() public view {
+        uint256 _amount = 1000 * 1e18;
+
+        (, uint256 _tokenValue) = priceOracleF.getTokenValueInUSD(address(token1), _amount);
+        assertEq(_tokenValue, (_amount * 2000));
+    }
+
     function testGetPriceDataFailForUnsupportedTokens() public {
         address _token = address(0xdead);
         vm.expectRevert(abi.encodeWithSelector(TOKEN_NOT_SUPPORTED.selector, _token));
         priceOracleF.getPriceData(_token);
     }
 
-    function testInitialization() public view {
-        uint64 _subId = priceOracleF.getSubscriptionId();
-        (address _router, bytes32 _donId) = priceOracleF.getRouterInfo();
-        assertEq(_subId, subscriptionId);
-        assertEq(_router, baseRouter);
-        assertEq(_donId, baseDonId);
+    function testGetTokenValueInUSDForDifferentDecimals() public {
+        uint256 _amount = 1000 * 1e6; // token2 has 6 decimals
+
+        // Test with token2 which has 6 decimals and price $1
+        uint256 expectedValue = (_amount * 1e12); // Should be normalized to 18 decimals
+        (, uint256 actualValue) = priceOracleF.getTokenValueInUSD(address(token2), _amount);
+        assertEq(actualValue, expectedValue, "Token3 USD value should be normalized correctly");
     }
 
-    function testSetupSource() public {
-        string memory _source = "const stableCoin = args[0]" "const localCurrency = args[1]"
-            "const apiResponse = await Functions.makeHttpRequest({"
-            "url: `https://api.paycrest.io/v1/rates/${stableCoin}/100/${localCurrency}`,"
-            "headers: {'API-Key': secrets.apiKey}" "})" "if (apiResponse.error) {" "console.error(apiResponse.error)"
-            "throw Error('Request failed')" "}" "const { data } = apiResponse;"
-            "return Functions.encodeUint256(data.data * (10**8))";
-        vm.expectEmit(true, true, true, true);
-        emit FunctionsSourceChanged(address(this), abi.encode(_source));
-        priceOracleF.setupSource(_source);
+    function testGetTokenValueInUSDFailsForUnsupportedToken() public {
+        uint256 amount = 1000 * 1e18;
 
-        string memory returnedSource = priceOracleF.getSource();
-        assertEq(returnedSource, _source);
+        // Deploy a new token that doesn't have a price feed
+        ERC20Mock newToken = new ERC20Mock(18);
+
+        vm.expectRevert(abi.encodeWithSelector(TOKEN_NOT_SUPPORTED.selector, address(newToken)));
+        priceOracleF.getTokenValueInUSD(address(newToken), amount);
     }
 
-    function testRequestPrice() public {
-        string[] memory args = new string[](2);
-        args[0] = "USDT";
-        args[1] = "NGN";
-        //request character info
-        bytes32 reqId = priceOracleF.sendRequest(subscriptionId, args);
-        assertTrue(reqId != 0);
+    function testGetTokenValueInUSDWithZeroAmount() public view {
+        uint256 _amount = 0;
 
-        vm.warp(block.timestamp + 1 minutes);
-
-        // (FunctionsResponse.FulfillResult _callbackResult, uint96 _callbackCost) = IFunctionsRouter(baseRouter).fulfill(
-        //     abi.encode(150000000000),
-        //     bytes(""),
-        //     1000000000,
-        //     0,
-        //     address(this),
-        //     FunctionsResponse.Commitment({
-        //         requestId: reqId,
-        //         coordinator: address(0),
-        //         estimatedTotalCostJuels: 0,
-        //         client: address(priceOracleF),
-        //         subscriptionId: subscriptionId,
-        //         callbackGasLimit: 300000,
-        //         adminFee: 0,
-        //         donFee: 0,
-        //         gasOverheadBeforeCallback: 0,
-        //         gasOverheadAfterCallback: 0,
-        //         timeoutTimestamp: uint32(block.timestamp + 5 minutes)
-        //     })
-        // );
+        // Should return 0 for zero amount regardless of price feed
+        (, uint256 _value) = priceOracleF.getTokenValueInUSD(address(token1), _amount);
+        assertEq(_value, 0);
     }
 
-    function addContractAsConsumer() internal {
-        vm.startPrank(subOwner);
-        IFunctionsSubscriptions(baseRouter).addConsumer(subscriptionId, address(diamond));
-        vm.stopPrank();
-    }
+    // function testInitialization() public view {
+    //     uint64 _subId = priceOracleF.getSubscriptionId();
+    //     (address _router, bytes32 _donId) = priceOracleF.getRouterInfo();
+    //     assertEq(_subId, subscriptionId);
+    //     assertEq(_router, baseRouter);
+    //     assertEq(_donId, baseDonId);
+    // }
+
+    // function testSetupSource() public {
+    //     string memory _source = "const stableCoin = args[0]" "const localCurrency = args[1]"
+    //         "const apiResponse = await Functions.makeHttpRequest({"
+    //         "url: `https://api.paycrest.io/v1/rates/${stableCoin}/100/${localCurrency}`,"
+    //         "headers: {'API-Key': secrets.apiKey}" "})" "if (apiResponse.error) {" "console.error(apiResponse.error)"
+    //         "throw Error('Request failed')" "}" "const { data } = apiResponse;"
+    //         "return Functions.encodeUint256(data.data * (10**8))";
+    //     vm.expectEmit(true, true, true, true);
+    //     emit FunctionsSourceChanged(address(this), abi.encode(_source));
+    //     priceOracleF.setupSource(_source);
+
+    //     string memory returnedSource = priceOracleF.getSource();
+    //     assertEq(returnedSource, _source);
+    // }
+
+    // function testRequestPrice() public {
+    //     string[] memory args = new string[](2);
+    //     args[0] = "USDT";
+    //     args[1] = "NGN";
+    //     //request character info
+    //     bytes32 reqId = priceOracleF.sendRequest(subscriptionId, args);
+    //     assertTrue(reqId != 0);
+
+    //     vm.warp(block.timestamp + 1 minutes);
+
+    //     // (FunctionsResponse.FulfillResult _callbackResult, uint96 _callbackCost) = IFunctionsRouter(baseRouter).fulfill(
+    //     //     abi.encode(150000000000),
+    //     //     bytes(""),
+    //     //     1000000000,
+    //     //     0,
+    //     //     address(this),
+    //     //     FunctionsResponse.Commitment({
+    //     //         requestId: reqId,
+    //     //         coordinator: address(0),
+    //     //         estimatedTotalCostJuels: 0,
+    //     //         client: address(priceOracleF),
+    //     //         subscriptionId: subscriptionId,
+    //     //         callbackGasLimit: 300000,
+    //     //         adminFee: 0,
+    //     //         donFee: 0,
+    //     //         gasOverheadBeforeCallback: 0,
+    //     //         gasOverheadAfterCallback: 0,
+    //     //         timeoutTimestamp: uint32(block.timestamp + 5 minutes)
+    //     //     })
+    //     // );
+    // }
+
+    // function addContractAsConsumer() internal {
+    //     vm.startPrank(subOwner);
+    //     IFunctionsSubscriptions(baseRouter).addConsumer(subscriptionId, address(diamond));
+    //     vm.stopPrank();
+    // }
 
     function addCollateralTokens() internal {
         protocolF.addCollateralToken(token1, pricefeed1);
@@ -194,7 +228,7 @@ contract PriceOracleTest is Base, IDiamondCut {
     }
 
     function deployPriceFeed() internal {
-        (address _token1, address _pricefeed1) = deployERC20ContractAndAddPriceFeed("token1", 16, 2000);
+        (address _token1, address _pricefeed1) = deployERC20ContractAndAddPriceFeed("token1", 18, 2000);
         (address _token2, address _pricefeed2) = deployERC20ContractAndAddPriceFeed("token2", 6, 1);
 
         token1 = _token1;

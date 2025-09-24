@@ -24,6 +24,8 @@ event CollateralTokenRemoved(address indexed token);
 event LocalCurrencyAdded(string currency);
 event LocalCurrencyRemoved(string currency);
 
+event BorrowComplete(uint256 indexed positionId, address indexed token, uint256 amount);
+
 // Chainlink functions events
 event RequestSent(bytes32 indexed id);
 

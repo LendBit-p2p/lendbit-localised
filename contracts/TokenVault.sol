@@ -25,6 +25,7 @@ contract TokenVault is ERC4626, ReentrancyGuard {
     error VaultPaused();
     error OnlyDiamond();
     error InsufficientShares();
+    error InsufficientBalance();
     error TransferNotAllowed();
     error NotWETHVault();
     error ETHTransferFailed();
@@ -52,13 +53,6 @@ contract TokenVault is ERC4626, ReentrancyGuard {
     /// @dev Not paused modifier
     modifier notPaused() {
         if (paused) revert VaultPaused();
-        _;
-    }
-
-    /// @dev Update exchange rate
-    modifier updateExchangeRates() {
-        exchangeRateStored = _getCurrentExchangeRate();
-        lastUpdateTimestamp = block.timestamp;
         _;
     }
 
@@ -99,27 +93,6 @@ contract TokenVault is ERC4626, ReentrancyGuard {
     function setPaused(bool _paused) external onlyDiamond {
         paused = _paused;
         emit PausedStateChanged(_paused);
-    }
-
-    /**
-     * @notice Update exchange rate (only diamond)
-     * @param _newExchangeRate New exchange rate
-     */
-    function updateExchangeRate(uint256 _newExchangeRate) external onlyDiamond {
-        if (_newExchangeRate < exchangeRateStored) {
-            revert InvalidRateCanOnlyIncrease();
-        }
-        exchangeRateStored = _newExchangeRate;
-        lastUpdateTimestamp = block.timestamp;
-        emit ExchangeRateUpdated(_newExchangeRate);
-    }
-
-    /**
-     * @notice Calculate current exchange rate with interest accrual
-     * @return Current exchange rate (assets per share)
-     */
-    function _getCurrentExchangeRate() internal view returns (uint256) {
-        return IVaultManager(diamond).getVaultExchangeRate(asset());
     }
 
     /**
@@ -196,6 +169,14 @@ contract TokenVault is ERC4626, ReentrancyGuard {
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
         return shares;
+    }
+
+    function borrow(address receiver, uint256 amount) external onlyDiamond {
+        IERC20 token = IERC20(asset());
+        if (token.balanceOf(address(this)) < amount) revert InsufficientBalance();
+
+        bool success = token.transfer(receiver, amount);
+        if (!success) revert TransferFailed();
     }
 
     /**

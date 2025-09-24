@@ -7,13 +7,16 @@ import "../contracts/interfaces/IDiamondCut.sol";
 import "../contracts/facets/DiamondCutFacet.sol";
 import "../contracts/facets/DiamondLoupeFacet.sol";
 import "../contracts/facets/OwnershipFacet.sol";
+import "../contracts/facets/PriceOracleFacet.sol";
 import "../contracts/facets/ProtocolFacet.sol";
 import "../contracts/facets/PositionManagerFacet.sol";
+import "../contracts/facets/VaultManagerFacet.sol";
 import "forge-std/Test.sol";
 import "../contracts/Diamond.sol";
 
 import "../contracts/models/Error.sol";
 import "../contracts/models/Event.sol";
+import {VaultConfiguration} from "../contracts/models/Protocol.sol";
 import {Base} from "./Base.t.sol";
 
 contract ProtocolTest is Base, IDiamondCut {
@@ -24,19 +27,31 @@ contract ProtocolTest is Base, IDiamondCut {
     OwnershipFacet ownerF;
     ProtocolFacet protocolF;
     PositionManagerFacet positionManagerF;
+    VaultManagerFacet vaultManagerF;
+    PriceOracleFacet priceOracleF;
 
     // Test tokens
     ERC20Mock token1;
     ERC20Mock token2;
     ERC20Mock token3;
+    ERC20Mock token4;
     address pricefeed1;
     address pricefeed2;
     address pricefeed3;
+    address pricefeed4;
 
     // Test addresses
     address user1 = mkaddr("user1");
     address user2 = mkaddr("user2");
     address nonAdmin = mkaddr("nonAdmin");
+
+    VaultConfiguration defaultConfig = VaultConfiguration({
+        totalDeposits: 0,
+        totalBorrows: 0,
+        interestRate: 500,
+        utilizationRate: 7500,
+        lastUpdated: 0
+    });
 
     function setUp() public {
         //deploy facets
@@ -46,10 +61,12 @@ contract ProtocolTest is Base, IDiamondCut {
         ownerF = new OwnershipFacet();
         protocolF = new ProtocolFacet();
         positionManagerF = new PositionManagerFacet();
+        vaultManagerF = new VaultManagerFacet();
+        priceOracleF = new PriceOracleFacet();
 
         //upgrade diamond with facets
         //build cut struct
-        FacetCut[] memory cut = new FacetCut[](4);
+        FacetCut[] memory cut = new FacetCut[](6);
 
         cut[0] = (
             FacetCut({
@@ -83,8 +100,26 @@ contract ProtocolTest is Base, IDiamondCut {
             })
         );
 
+        cut[4] = (
+            FacetCut({
+                facetAddress: address(vaultManagerF),
+                action: FacetCutAction.Add,
+                functionSelectors: generateSelectors("VaultManagerFacet")
+            })
+        );
+
+        cut[5] = (
+            FacetCut({
+                facetAddress: address(priceOracleF),
+                action: FacetCutAction.Add,
+                functionSelectors: generateSelectors("PriceOracleFacet")
+            })
+        );
+
         protocolF = ProtocolFacet(address(diamond));
         positionManagerF = PositionManagerFacet(address(diamond));
+        vaultManagerF = VaultManagerFacet(address(diamond));
+        priceOracleF = PriceOracleFacet(address(diamond));
 
         //upgrade diamond
         IDiamondCut(address(diamond)).diamondCut(cut, address(0x0), "");
@@ -96,7 +131,7 @@ contract ProtocolTest is Base, IDiamondCut {
         (address _token1, address _pricefeed1) = deployERC20ContractAndAddPriceFeed("token1", 18, 1500);
         (address _token2, address _pricefeed2) = deployERC20ContractAndAddPriceFeed("token2", 18, 300);
         (address _token3, address _pricefeed3) = deployERC20ContractAndAddPriceFeed("token3", 6, 1);
-    
+
         token1 = ERC20Mock(_token1);
         token2 = ERC20Mock(_token2);
         token3 = ERC20Mock(_token3);
@@ -108,7 +143,7 @@ contract ProtocolTest is Base, IDiamondCut {
         // Setup initial collateral tokens
         _setupInitialCollateralTokens();
     }
-    
+
     function _setupInitialCollateralTokens() internal {
         protocolF.addCollateralToken(address(token1), pricefeed1);
         protocolF.addCollateralToken(address(token2), pricefeed2);
@@ -120,17 +155,17 @@ contract ProtocolTest is Base, IDiamondCut {
 
     function testAddCollateralToken() public {
         address newToken = address(0x123);
-        
+
         vm.expectEmit(true, false, false, false);
         emit CollateralTokenAdded(newToken);
-        
+
         protocolF.addCollateralToken(newToken, pricefeed1);
-        
+
         assertTrue(protocolF.isCollateralTokenSupported(newToken));
-        
+
         address[] memory allTokens = protocolF.getAllCollateralTokens();
         bool found = false;
-        for (uint i = 0; i < allTokens.length; i++) {
+        for (uint256 i = 0; i < allTokens.length; i++) {
             if (allTokens[i] == newToken) {
                 found = true;
                 break;
@@ -141,7 +176,7 @@ contract ProtocolTest is Base, IDiamondCut {
 
     function testAddCollateralTokenFailsIfNotSecurityCouncil() public {
         address newToken = address(0x123);
-        
+
         vm.startPrank(nonAdmin);
         vm.expectRevert(abi.encodeWithSelector(ONLY_SECURITY_COUNCIL.selector));
         protocolF.addCollateralToken(newToken, pricefeed1);
@@ -164,17 +199,17 @@ contract ProtocolTest is Base, IDiamondCut {
 
     function testRemoveCollateralToken() public {
         assertTrue(protocolF.isCollateralTokenSupported(address(token1)));
-        
+
         vm.expectEmit(true, false, false, false);
         emit CollateralTokenRemoved(address(token1));
-        
+
         protocolF.removeCollateralToken(address(token1));
-        
+
         assertFalse(protocolF.isCollateralTokenSupported(address(token1)));
-        
+
         address[] memory allTokens = protocolF.getAllCollateralTokens();
         bool found = false;
-        for (uint i = 0; i < allTokens.length; i++) {
+        for (uint256 i = 0; i < allTokens.length; i++) {
             if (allTokens[i] == address(token1)) {
                 found = true;
                 break;
@@ -206,35 +241,35 @@ contract ProtocolTest is Base, IDiamondCut {
 
     function testDepositCollateral() public {
         uint256 depositAmount = 1000 * 1e18;
-        
+
         // Mint tokens to user1
         token1.mint(user1, depositAmount);
-        
+
         vm.startPrank(user1);
-        
+
         // Approve spending
         token1.approve(address(diamond), depositAmount);
-        
+
         // Expect events
         vm.expectEmit(true, true, false, false);
         emit PositionIdCreated(1, user1);
-        
+
         vm.expectEmit(true, true, true, false);
         emit CollateralDeposited(1, address(token1), depositAmount);
-        
+
         // Deposit collateral
         protocolF.depositCollateral(address(token1), depositAmount);
-        
+
         vm.stopPrank();
-        
+
         // Verify collateral was deposited
         uint256 collateralBalance = protocolF.getPositionCollateral(1, address(token1));
         assertEq(collateralBalance, depositAmount);
-        
+
         // Verify token was transferred
         assertEq(token1.balanceOf(user1), 0);
         assertEq(token1.balanceOf(address(diamond)), depositAmount);
-        
+
         // Verify position was created
         assertEq(positionManagerF.getPositionIdForUser(user1), 1);
     }
@@ -242,30 +277,30 @@ contract ProtocolTest is Base, IDiamondCut {
     function testDepositCollateralToExistingPosition() public {
         uint256 depositAmount1 = 1000 * 1e18;
         uint256 depositAmount2 = 500 * 1e18;
-        
+
         // Create position first
         positionManagerF.createPositionFor(user1);
         uint256 positionId = positionManagerF.getPositionIdForUser(user1);
-        
+
         // Mint tokens to user1
         token1.mint(user1, depositAmount1 + depositAmount2);
-        
+
         vm.startPrank(user1);
-        
+
         // First deposit
         token1.approve(address(diamond), depositAmount1);
         protocolF.depositCollateral(address(token1), depositAmount1);
-        
+
         // Second deposit
         token1.approve(address(diamond), depositAmount2);
-        
+
         vm.expectEmit(true, true, true, false);
         emit CollateralDeposited(positionId, address(token1), depositAmount2);
-        
+
         protocolF.depositCollateral(address(token1), depositAmount2);
-        
+
         vm.stopPrank();
-        
+
         // Verify total collateral
         uint256 totalCollateral = protocolF.getPositionCollateral(positionId, address(token1));
         assertEq(totalCollateral, depositAmount1 + depositAmount2);
@@ -295,11 +330,11 @@ contract ProtocolTest is Base, IDiamondCut {
     function testDepositCollateralFailsForInsufficientAllowance() public {
         uint256 depositAmount = 1000 * 1e18;
         token1.mint(user1, depositAmount);
-        
+
         vm.startPrank(user1);
         // Don't approve or approve less than needed
         token1.approve(address(diamond), depositAmount - 1);
-        
+
         vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_ALLOWANCE.selector));
         protocolF.depositCollateral(address(token1), depositAmount);
         vm.stopPrank();
@@ -308,10 +343,10 @@ contract ProtocolTest is Base, IDiamondCut {
     function testDepositCollateralFailsForInsufficientBalance() public {
         uint256 depositAmount = 1000 * 1e18;
         token1.mint(user1, depositAmount - 1); // Mint less than needed
-        
+
         vm.startPrank(user1);
         token1.approve(address(diamond), depositAmount);
-        
+
         vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_BALANCE.selector));
         protocolF.depositCollateral(address(token1), depositAmount);
         vm.stopPrank();
@@ -324,27 +359,27 @@ contract ProtocolTest is Base, IDiamondCut {
     function testWithdrawCollateral() public {
         uint256 depositAmount = 1000 * 1e18;
         uint256 withdrawAmount = 300 * 1e18;
-        
+
         // First deposit some collateral
         token1.mint(user1, depositAmount);
         vm.startPrank(user1);
         token1.approve(address(diamond), depositAmount);
         protocolF.depositCollateral(address(token1), depositAmount);
-        
+
         uint256 positionId = positionManagerF.getPositionIdForUser(user1);
-        
+
         // Verify initial collateral balance
         assertEq(protocolF.getPositionCollateral(positionId, address(token1)), depositAmount);
         assertEq(token1.balanceOf(user1), 0);
         assertEq(token1.balanceOf(address(diamond)), depositAmount);
-        
+
         // Withdraw some collateral
         vm.expectEmit(true, true, true, false);
         emit CollateralWithdrawn(positionId, address(token1), withdrawAmount);
-        
+
         protocolF.withdrawCollateral(address(token1), withdrawAmount);
         vm.stopPrank();
-        
+
         // Verify collateral was withdrawn
         uint256 remainingCollateral = depositAmount - withdrawAmount;
         assertEq(protocolF.getPositionCollateral(positionId, address(token1)), remainingCollateral);
@@ -354,22 +389,22 @@ contract ProtocolTest is Base, IDiamondCut {
 
     function testWithdrawAllCollateral() public {
         uint256 depositAmount = 1000 * 1e18;
-        
+
         // First deposit some collateral
         token1.mint(user1, depositAmount);
         vm.startPrank(user1);
         token1.approve(address(diamond), depositAmount);
         protocolF.depositCollateral(address(token1), depositAmount);
-        
+
         uint256 positionId = positionManagerF.getPositionIdForUser(user1);
-        
+
         // Withdraw all collateral
         vm.expectEmit(true, true, true, false);
         emit CollateralWithdrawn(positionId, address(token1), depositAmount);
-        
+
         protocolF.withdrawCollateral(address(token1), depositAmount);
         vm.stopPrank();
-        
+
         // Verify all collateral was withdrawn
         assertEq(protocolF.getPositionCollateral(positionId, address(token1)), 0);
         assertEq(token1.balanceOf(user1), depositAmount);
@@ -381,25 +416,25 @@ contract ProtocolTest is Base, IDiamondCut {
         uint256 depositAmount2 = 2000 * 1e18;
         uint256 withdrawAmount1 = 500 * 1e18;
         uint256 withdrawAmount2 = 1000 * 1e18;
-        
+
         // Deposit two different tokens
         token1.mint(user1, depositAmount1);
         token2.mint(user1, depositAmount2);
-        
+
         vm.startPrank(user1);
         token1.approve(address(diamond), depositAmount1);
         token2.approve(address(diamond), depositAmount2);
-        
+
         protocolF.depositCollateral(address(token1), depositAmount1);
         protocolF.depositCollateral(address(token2), depositAmount2);
-        
+
         uint256 positionId = positionManagerF.getPositionIdForUser(user1);
-        
+
         // Withdraw from both tokens
         protocolF.withdrawCollateral(address(token1), withdrawAmount1);
         protocolF.withdrawCollateral(address(token2), withdrawAmount2);
         vm.stopPrank();
-        
+
         // Verify withdrawals
         assertEq(protocolF.getPositionCollateral(positionId, address(token1)), depositAmount1 - withdrawAmount1);
         assertEq(protocolF.getPositionCollateral(positionId, address(token2)), depositAmount2 - withdrawAmount2);
@@ -417,13 +452,13 @@ contract ProtocolTest is Base, IDiamondCut {
     function testWithdrawCollateralFailsForInsufficientBalance() public {
         uint256 depositAmount = 1000 * 1e18;
         uint256 withdrawAmount = 1500 * 1e18; // More than deposited
-        
+
         // First deposit some collateral
         token1.mint(user1, depositAmount);
         vm.startPrank(user1);
         token1.approve(address(diamond), depositAmount);
         protocolF.depositCollateral(address(token1), depositAmount);
-        
+
         // Try to withdraw more than available
         vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_BALANCE.selector));
         protocolF.withdrawCollateral(address(token1), withdrawAmount);
@@ -432,22 +467,22 @@ contract ProtocolTest is Base, IDiamondCut {
 
     function testWithdrawCollateralFailsForZeroAmount() public {
         uint256 depositAmount = 1000 * 1e18;
-        
+
         // First deposit some collateral
         token1.mint(user1, depositAmount);
         vm.startPrank(user1);
         token1.approve(address(diamond), depositAmount);
         protocolF.depositCollateral(address(token1), depositAmount);
-        
+
         // Try to withdraw zero amount - this should fail at the LibProtocol level
         // Note: The current implementation doesn't have zero amount check in withdraw
         // but we can test withdrawing 0 should leave balances unchanged
         uint256 positionId = positionManagerF.getPositionIdForUser(user1);
         uint256 initialBalance = protocolF.getPositionCollateral(positionId, address(token1));
         uint256 initialUserBalance = token1.balanceOf(user1);
-        
+
         protocolF.withdrawCollateral(address(token1), 0);
-        
+
         // Balances should remain unchanged
         assertEq(protocolF.getPositionCollateral(positionId, address(token1)), initialBalance);
         assertEq(token1.balanceOf(user1), initialUserBalance);
@@ -462,14 +497,14 @@ contract ProtocolTest is Base, IDiamondCut {
 
     function testWithdrawCollateralFromEmptyBalance() public {
         uint256 depositAmount = 1000 * 1e18;
-        
+
         // Deposit and then withdraw all
         token1.mint(user1, depositAmount);
         vm.startPrank(user1);
         token1.approve(address(diamond), depositAmount);
         protocolF.depositCollateral(address(token1), depositAmount);
         protocolF.withdrawCollateral(address(token1), depositAmount);
-        
+
         // Try to withdraw again from empty balance
         vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_BALANCE.selector));
         protocolF.withdrawCollateral(address(token1), 1);
@@ -478,22 +513,22 @@ contract ProtocolTest is Base, IDiamondCut {
 
     function testWithdrawCollateralDifferentTokensIndependently() public {
         uint256 depositAmount = 1000 * 1e18;
-        
+
         // Deposit token1 only
         token1.mint(user1, depositAmount);
         vm.startPrank(user1);
         token1.approve(address(diamond), depositAmount);
         protocolF.depositCollateral(address(token1), depositAmount);
-        
+
         uint256 positionId = positionManagerF.getPositionIdForUser(user1);
-        
+
         // Should be able to withdraw token1
         protocolF.withdrawCollateral(address(token1), 500 * 1e18);
-        
+
         // Should fail to withdraw token2 (no balance)
         vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_BALANCE.selector));
         protocolF.withdrawCollateral(address(token2), 1);
-        
+
         // Verify token1 balance is correct and token2 balance is still 0
         assertEq(protocolF.getPositionCollateral(positionId, address(token1)), 500 * 1e18);
         assertEq(protocolF.getPositionCollateral(positionId, address(token2)), 0);
@@ -503,29 +538,29 @@ contract ProtocolTest is Base, IDiamondCut {
     function testWithdrawCollateralMultipleUsers() public {
         uint256 depositAmount = 1000 * 1e18;
         uint256 withdrawAmount = 300 * 1e18;
-        
+
         // Both users deposit
         token1.mint(user1, depositAmount);
         token1.mint(user2, depositAmount);
-        
+
         vm.startPrank(user1);
         token1.approve(address(diamond), depositAmount);
         protocolF.depositCollateral(address(token1), depositAmount);
         vm.stopPrank();
-        
+
         vm.startPrank(user2);
         token1.approve(address(diamond), depositAmount);
         protocolF.depositCollateral(address(token1), depositAmount);
         vm.stopPrank();
-        
+
         uint256 user1PositionId = positionManagerF.getPositionIdForUser(user1);
         uint256 user2PositionId = positionManagerF.getPositionIdForUser(user2);
-        
+
         // User1 withdraws
         vm.startPrank(user1);
         protocolF.withdrawCollateral(address(token1), withdrawAmount);
         vm.stopPrank();
-        
+
         // Verify only user1's collateral was affected
         assertEq(protocolF.getPositionCollateral(user1PositionId, address(token1)), depositAmount - withdrawAmount);
         assertEq(protocolF.getPositionCollateral(user2PositionId, address(token1)), depositAmount);
@@ -536,58 +571,280 @@ contract ProtocolTest is Base, IDiamondCut {
 
     function testWithdrawCollateralPartialAmounts() public {
         uint256 depositAmount = 1000 * 1e18;
-        
+
         token1.mint(user1, depositAmount);
         vm.startPrank(user1);
         token1.approve(address(diamond), depositAmount);
         protocolF.depositCollateral(address(token1), depositAmount);
-        
+
         uint256 positionId = positionManagerF.getPositionIdForUser(user1);
-        
+
         // Multiple partial withdrawals
         protocolF.withdrawCollateral(address(token1), 100 * 1e18);
         assertEq(protocolF.getPositionCollateral(positionId, address(token1)), 900 * 1e18);
         assertEq(token1.balanceOf(user1), 100 * 1e18);
-        
+
         protocolF.withdrawCollateral(address(token1), 200 * 1e18);
         assertEq(protocolF.getPositionCollateral(positionId, address(token1)), 700 * 1e18);
         assertEq(token1.balanceOf(user1), 300 * 1e18);
-        
+
         protocolF.withdrawCollateral(address(token1), 700 * 1e18); // Withdraw remaining
         assertEq(protocolF.getPositionCollateral(positionId, address(token1)), 0);
         assertEq(token1.balanceOf(user1), 1000 * 1e18);
-        
+
         vm.stopPrank();
+    }
+
+    // =============================================================
+    //                      BORROW FUNCTION TESTS
+    // =============================================================
+
+    function testBorrow() public {
+        createVaultAndFund(1000000e18);
+        uint256 _collateralAmount = 10000 * 1e18; // $15M worth of token1 (10k * $1500)
+        uint256 _borrowAmount = 1000 * 1e6; // $250k worth of token2 (1k * $250)
+
+        // Deposit collateral first
+        token1.mint(user1, _collateralAmount);
+
+        vm.startPrank(user1);
+        token1.approve(address(diamond), _collateralAmount);
+        protocolF.depositCollateral(address(token1), _collateralAmount);
+
+        uint256 _positionId = positionManagerF.getPositionIdForUser(user1);
+        uint256 _positionCollateral = protocolF.getPositionCollateralValue(_positionId);
+
+        uint256 _borrowId = protocolF.borrow(address(token4), _borrowAmount);
+        vm.stopPrank();
+
+        assertLt(protocolF.getPositionCollateralValue(_positionId), _positionCollateral);
+        assertEq(token4.balanceOf(user1), _borrowAmount);
+    }
+
+    function testBorrowFailsWithoutPosition() public {
+        uint256 borrowAmount = 1000 * 1e18;
+
+        vm.startPrank(user1);
+        vm.expectRevert(abi.encodeWithSelector(NO_POSITION_ID.selector, user1));
+        protocolF.borrow(address(token1), borrowAmount);
+        vm.stopPrank();
+    }
+
+    function testBorrowFailsForUnsupportedToken() public {
+        // Create position first
+        positionManagerF.createPositionFor(user1);
+
+        vm.startPrank(user1);
+        vm.expectRevert(abi.encodeWithSelector(TOKEN_NOT_SUPPORTED.selector, address(token3)));
+        protocolF.borrow(address(token3), 1000 * 1e18);
+        vm.stopPrank();
+    }
+
+    // =============================================================
+    //                  LOCAL CURRENCY TESTS
+    // =============================================================
+
+    function testAddLocalCurrency() public {
+        string memory currency = "NGN";
+
+        vm.expectEmit(true, false, false, false);
+        emit LocalCurrencyAdded(currency);
+
+        protocolF.addLocalCurrency(currency);
+
+        // We can't easily test the storage directly, but we can test removal
+        protocolF.removeLocalCurrency(currency);
+    }
+
+    function testAddLocalCurrencyFailsIfNotSecurityCouncil() public {
+        string memory currency = "USD";
+
+        vm.startPrank(nonAdmin);
+        vm.expectRevert(abi.encodeWithSelector(ONLY_SECURITY_COUNCIL.selector));
+        protocolF.addLocalCurrency(currency);
+        vm.stopPrank();
+    }
+
+    function testAddLocalCurrencyFailsForEmptyString() public {
+        string memory currency = "";
+
+        vm.expectRevert(abi.encodeWithSelector(EMPTY_STRING.selector));
+        protocolF.addLocalCurrency(currency);
+    }
+
+    function testAddLocalCurrencyFailsIfAlreadySupported() public {
+        string memory currency = "GBP";
+
+        // Add currency first
+        protocolF.addLocalCurrency(currency);
+
+        // Try to add again
+        vm.expectRevert(abi.encodeWithSelector(CURRENCY_ALREADY_SUPPORTED.selector, currency));
+        protocolF.addLocalCurrency(currency);
+    }
+
+    function testRemoveLocalCurrency() public {
+        string memory currency = "EUR";
+
+        // Add currency first
+        protocolF.addLocalCurrency(currency);
+
+        // Now remove it
+        vm.expectEmit(true, false, false, false);
+        emit LocalCurrencyRemoved(currency);
+
+        protocolF.removeLocalCurrency(currency);
+    }
+
+    function testRemoveLocalCurrencyFailsIfNotSecurityCouncil() public {
+        string memory currency = "JPY";
+
+        // Add currency first
+        protocolF.addLocalCurrency(currency);
+
+        // Try to remove as non-admin
+        vm.startPrank(nonAdmin);
+        vm.expectRevert(abi.encodeWithSelector(ONLY_SECURITY_COUNCIL.selector));
+        protocolF.removeLocalCurrency(currency);
+        vm.stopPrank();
+    }
+
+    function testRemoveLocalCurrencyFailsForEmptyString() public {
+        string memory currency = "";
+
+        vm.expectRevert(abi.encodeWithSelector(EMPTY_STRING.selector));
+        protocolF.removeLocalCurrency(currency);
+    }
+
+    function testRemoveLocalCurrencyFailsIfNotSupported() public {
+        string memory currency = "CHF";
+
+        vm.expectRevert(abi.encodeWithSelector(CURRENCY_NOT_SUPPORTED.selector, currency));
+        protocolF.removeLocalCurrency(currency);
     }
 
     // =============================================================
     //                       VALUE CALCULATION TESTS
     // =============================================================
+    function testGetHealthFactorWithBorrows() public {
+        uint256 depositAmount = 1000 * 1e18; // $1.5M collateral
+        uint256 currentBorrowValue = 500000 * 1e18; // $500k borrow
 
-    function testGetTokenValueInUSD() public {
-        uint256 amount = 1000 * 1e18;
-        
-        // Mock a price feed for token1 (let's say 1 token = $10 USD)
-        // Since we don't have actual price feeds, we'll test the basic structure
-        // In a real test, you'd mock the price feed to return specific values
-        
-        vm.expectRevert(); // Should revert because no price feed is set
-        protocolF.getTokenValueInUSD(address(0xdead), amount);
+        // Create position with collateral
+        token1.mint(user1, depositAmount);
+        vm.startPrank(user1);
+        token1.approve(address(diamond), depositAmount);
+        protocolF.depositCollateral(address(token1), depositAmount);
+        vm.stopPrank();
+
+        uint256 positionId = positionManagerF.getPositionIdForUser(user1);
+
+        // Calculate health factor
+        uint256 healthFactor = protocolF.getHealthFactor(positionId, currentBorrowValue);
+
+        // Expected: (1.5M * 0.8) / 0.5M = 2.4
+        uint256 collateralValue = 1000 * 1500 * 1e18;
+        uint256 adjustedCollateralValue = (collateralValue * 8000) / 10000;
+        uint256 expectedHealthFactor = (adjustedCollateralValue * 1e18) / currentBorrowValue;
+
+        assertEq(healthFactor, expectedHealthFactor, "Health factor calculation should be correct");
     }
 
-    function testGetTokenValueInUSDWithZeroAmount() public view {
-        uint256 amount = 0;
-        
-        // Should return 0 for zero amount regardless of price feed
-        uint256 value = protocolF.getTokenValueInUSD(address(token1), amount);
-        assertEq(value, 0);
+    function testGetHealthFactorEdgeCases() public {
+        // Test with zero collateral and zero borrow
+        positionManagerF.createPositionFor(user1);
+        uint256 positionId = positionManagerF.getPositionIdForUser(user1);
+
+        // With zero collateral and zero additional borrow, should return 0
+        uint256 healthFactor = protocolF.getHealthFactor(positionId, 0);
+        assertEq(healthFactor, 0, "Zero collateral with zero borrow should return 0");
+
+        // With zero collateral and some borrow, should return 0
+        uint256 healthFactorWithBorrow = protocolF.getHealthFactor(positionId, 1000 * 1e18);
+        assertEq(healthFactorWithBorrow, 0, "Zero collateral with borrow should return 0");
     }
 
+    // =============================================================
+    //              INTEGRATION TESTS WITH MULTIPLE FUNCTIONS
+    // =============================================================
+
+    function testCompleteCollateralAndValueFlow() public {
+        uint256 depositAmount1 = 500 * 1e18; // 500 token1 @ $1500 = $750k
+        uint256 depositAmount2 = 1000 * 1e18; // 1000 token2 @ $300 = $300k
+
+        // Setup collateral
+        token1.mint(user1, depositAmount1);
+        token2.mint(user1, depositAmount2);
+
+        vm.startPrank(user1);
+        token1.approve(address(diamond), depositAmount1);
+        token2.approve(address(diamond), depositAmount2);
+
+        protocolF.depositCollateral(address(token1), depositAmount1);
+        protocolF.depositCollateral(address(token2), depositAmount2);
+        vm.stopPrank();
+
+        uint256 positionId = positionManagerF.getPositionIdForUser(user1);
+
+        // Test individual token values
+        (, uint256 token1Value) = priceOracleF.getTokenValueInUSD(address(token1), depositAmount1);
+        (, uint256 token2Value) = priceOracleF.getTokenValueInUSD(address(token2), depositAmount2);
+
+        assertEq(token1Value, 500 * 1500 * 1e18, "Token1 value should be correct");
+        assertEq(token2Value, 1000 * 300 * 1e18, "Token2 value should be correct");
+
+        // Test total collateral value
+        uint256 totalCollateralValue = protocolF.getPositionCollateralValue(positionId);
+        assertEq(totalCollateralValue, token1Value + token2Value, "Total collateral should sum individual values");
+
+        // Test borrowed value (should be 0)
+        uint256 borrowedValue = protocolF.getPositionBorrowedValue(positionId);
+        assertEq(borrowedValue, 0, "Borrowed value should be 0");
+
+        // Test health factor with hypothetical borrow
+        uint256 hypotheticalBorrow = 200000 * 1e18; // $200k
+        uint256 healthFactor = protocolF.getHealthFactor(positionId, hypotheticalBorrow);
+
+        // Expected: ((750k + 300k) * 0.8) / 200k = 4.2
+        uint256 expectedHealthFactor = ((totalCollateralValue * 8000 / 10000) * 1e18) / hypotheticalBorrow;
+        assertEq(healthFactor, expectedHealthFactor, "Health factor should be calculated correctly");
+    }
+
+    function testLocalCurrencyManagement() public {
+        string[] memory currencies = new string[](3);
+        currencies[0] = "NGN";
+        currencies[1] = "KES";
+        currencies[2] = "UGX";
+
+        // Add multiple currencies
+        for (uint256 i = 0; i < currencies.length; i++) {
+            vm.expectEmit(true, false, false, false);
+            emit LocalCurrencyAdded(currencies[i]);
+            protocolF.addLocalCurrency(currencies[i]);
+        }
+
+        // Remove one currency
+        vm.expectEmit(true, false, false, false);
+        emit LocalCurrencyRemoved(currencies[1]);
+        protocolF.removeLocalCurrency(currencies[1]);
+
+        // Verify we can't remove the same currency again
+        vm.expectRevert(abi.encodeWithSelector(CURRENCY_NOT_SUPPORTED.selector, currencies[1]));
+        protocolF.removeLocalCurrency(currencies[1]);
+
+        // Verify we can still remove other currencies
+        protocolF.removeLocalCurrency(currencies[0]);
+        protocolF.removeLocalCurrency(currencies[2]);
+    }
+
+    // =============================================================
+    //                       VALUE CALCULATION TESTS
+    // =============================================================
     function testGetPositionCollateralValueEmptyPosition() public {
         // Create empty position
         positionManagerF.createPositionFor(user1);
         uint256 positionId = positionManagerF.getPositionIdForUser(user1);
-        
+
         // Should return 0 for empty position
         uint256 value = protocolF.getPositionCollateralValue(positionId);
         assertEq(value, 0);
@@ -597,7 +854,7 @@ contract ProtocolTest is Base, IDiamondCut {
         // Create a position
         positionManagerF.createPositionFor(user1);
         uint256 positionId = positionManagerF.getPositionIdForUser(user1);
-        
+
         // Should return 0 for new position with no borrows
         uint256 value = protocolF.getPositionBorrowedValue(positionId);
         assertEq(value, 0);
@@ -613,101 +870,29 @@ contract ProtocolTest is Base, IDiamondCut {
         vm.stopPrank();
 
         uint256 positionId = positionManagerF.getPositionIdForUser(user1);
-        
+
         // Health factor should be max (type(uint256).max) when no borrows
         uint256 healthFactor = protocolF.getHealthFactor(positionId, 0);
-        assertEq(healthFactor, 12E41);
+        assertEq(healthFactor, 12e41);
     }
 
     function testGetHealthFactorWithCurrentBorrowValue() public {
         uint256 currentBorrowValue = 500 * 1e18; // $500 worth of borrow
         uint256 positionId = depositCollateralFor(user1, address(token1), (1 * 1e18));
-        
+
         // With collateral value 0 and borrow value > 0, health factor calculation
         // will depend on the actual collateral value from price feeds
         // This will likely revert or return 0 without proper price feeds
         uint256 _healthFactor = protocolF.getHealthFactor(positionId, currentBorrowValue);
-        assertEq(_healthFactor, 2.4E18);
+        assertEq(_healthFactor, 2.4e18);
 
         // 100% collateral value
-        _healthFactor = protocolF.getHealthFactor(positionId, 1500E18);
-        assertEq(_healthFactor, 0.8E18);
+        _healthFactor = protocolF.getHealthFactor(positionId, 1500e18);
+        assertEq(_healthFactor, 0.8e18);
 
         // 80% liquidation threshold
-        _healthFactor = protocolF.getHealthFactor(positionId, 1200E18);
-        assertEq(_healthFactor, 1E18);
-    }
-
-    // =============================================================
-    //              MOCK PRICE FEED INTEGRATION TESTS
-    // =============================================================
-    
-    // These tests would work with actual mock price feeds
-    // For now, they demonstrate the expected behavior structure
-    
-    function testTokenValueCalculationWithMockPrices() public {
-        // This test would require setting up mock price feeds
-        // Example test structure:
-        // 1. Deploy mock price feed that returns $10 for token1
-        // 2. Add token1 as collateral with the mock price feed
-        // 3. Test that 1000 tokens = $10,000 USD value
-        
-        // Mock setup would look like:
-        // MockV3Aggregator mockPriceFeed = new MockV3Aggregator(8, 10_00000000); // $10 with 8 decimals
-        // protocolF.addCollateralToken(address(token1), address(mockPriceFeed));
-        // uint256 value = protocolF.getTokenValueInUSD(address(token1), 1000 * 1e18);
-        // assertEq(value, 10000 * 1e18); // $10,000 in 18 decimals
-    }
-
-    function testPositionCollateralValueWithMultipleTokens() public {
-        // This would test multiple tokens with different prices
-        // Example:
-        // - 1000 token1 @ $10 each = $10,000
-        // - 500 token2 @ $20 each = $10,000  
-        // - Total collateral value = $20,000
-    }
-
-    function testHealthFactorCalculation() public {
-        // This would test the actual health factor calculation
-        // Example:
-        // - Collateral value: $20,000
-        // - Borrowed value: $10,000
-        // - Liquidation threshold: 80% (8000 basis points)
-        // - Health factor = (20000 * 0.8) / 10000 = 1.6
-    }
-
-    function testHealthFactorEdgeCases() public {
-        // Test edge cases:
-        // 1. Health factor at exactly liquidation threshold (1.0)
-        // 2. Health factor below liquidation threshold (<1.0)
-        // 3. Very high health factor (low borrow relative to collateral)
-        // 4. Zero collateral with borrows (should handle gracefully)
-    }
-
-    // =============================================================
-    //              DECIMAL NORMALIZATION TESTS
-    // =============================================================
-
-    function testDecimalNormalizationFor6DecimalTokens() public {
-        // Test that 6-decimal tokens (like USDC) are properly normalized to 18 decimals
-        // This would require creating mock tokens with different decimal places
-    }
-
-    function testDecimalNormalizationFor18DecimalTokens() public {
-        // Test that 18-decimal tokens remain unchanged
-    }
-
-    function testDecimalNormalizationFor8DecimalTokens() public {
-        // Test that 8-decimal tokens are properly normalized to 18 decimals
-    }
-
-    // =============================================================
-    //                  PRICE STALENESS TESTS
-    // =============================================================
-
-    function testInvalidPriceFeedRejection() public {
-        // Test that invalid/zero prices are rejected
-        // This would require a mock price feed that returns invalid data
+        _healthFactor = protocolF.getHealthFactor(positionId, 1200e18);
+        assertEq(_healthFactor, 1e18);
     }
 
     // =============================================================
@@ -723,7 +908,7 @@ contract ProtocolTest is Base, IDiamondCut {
 
     function testGetAllCollateralTokens() public view {
         address[] memory tokens = protocolF.getAllCollateralTokens();
-        
+
         assertEq(tokens.length, 2);
         assertTrue(tokens[0] == address(token1) || tokens[1] == address(token1));
         assertTrue(tokens[0] == address(token2) || tokens[1] == address(token2));
@@ -732,38 +917,38 @@ contract ProtocolTest is Base, IDiamondCut {
     function testGetAllCollateralTokensAfterAddingAndRemoving() public {
         // Add a new token
         protocolF.addCollateralToken(address(token3), pricefeed3);
-        
+
         address[] memory tokens = protocolF.getAllCollateralTokens();
         assertEq(tokens.length, 3);
-        
+
         // Remove a token
         protocolF.removeCollateralToken(address(token1));
-        
+
         tokens = protocolF.getAllCollateralTokens();
         assertEq(tokens.length, 2);
-        
+
         // Verify token1 is not in the array
-        for (uint i = 0; i < tokens.length; i++) {
+        for (uint256 i = 0; i < tokens.length; i++) {
             assertTrue(tokens[i] != address(token1));
         }
     }
 
     function testGetPositionCollateral() public {
         uint256 depositAmount = 1000 * 1e18;
-        
+
         // Initially should be 0
         assertEq(protocolF.getPositionCollateral(1, address(token1)), 0);
-        
+
         // Deposit some collateral
         token1.mint(user1, depositAmount);
         vm.startPrank(user1);
         token1.approve(address(diamond), depositAmount);
         protocolF.depositCollateral(address(token1), depositAmount);
         vm.stopPrank();
-        
+
         // Should now return the deposited amount
         assertEq(protocolF.getPositionCollateral(1, address(token1)), depositAmount);
-        
+
         // Other tokens should still be 0
         assertEq(protocolF.getPositionCollateral(1, address(token2)), 0);
         assertEq(protocolF.getPositionCollateral(2, address(token1)), 0);
@@ -772,13 +957,13 @@ contract ProtocolTest is Base, IDiamondCut {
     function testMultipleUsersAndTokens() public {
         uint256 user1Amount = 1000 * 1e18;
         uint256 user2Amount = 2000 * 1e18;
-        
+
         // Setup tokens for users
         token1.mint(user1, user1Amount);
         token2.mint(user1, user1Amount);
         token1.mint(user2, user2Amount);
         token2.mint(user2, user2Amount);
-        
+
         // User1 deposits
         vm.startPrank(user1);
         token1.approve(address(diamond), user1Amount);
@@ -786,16 +971,16 @@ contract ProtocolTest is Base, IDiamondCut {
         protocolF.depositCollateral(address(token1), user1Amount);
         protocolF.depositCollateral(address(token2), user1Amount / 2);
         vm.stopPrank();
-        
+
         // User2 deposits
         vm.startPrank(user2);
         token1.approve(address(diamond), user2Amount);
         protocolF.depositCollateral(address(token1), user2Amount);
         vm.stopPrank();
-        
+
         uint256 user1PositionId = positionManagerF.getPositionIdForUser(user1);
         uint256 user2PositionId = positionManagerF.getPositionIdForUser(user2);
-        
+
         // Verify individual collateral amounts
         assertEq(protocolF.getPositionCollateral(user1PositionId, address(token1)), user1Amount);
         assertEq(protocolF.getPositionCollateral(user1PositionId, address(token2)), user1Amount / 2);
@@ -808,42 +993,59 @@ contract ProtocolTest is Base, IDiamondCut {
         uint256 depositAmount1 = 2 * 1e18; // 2 tokens of token1 (18 decimals)
         uint256 depositAmount2 = 10 * 1e18; // 10 tokens of token2 (18 decimals)
         uint256 depositAmount3 = 1000 * 1e6; // 1000 tokens of token3 (6 decimals)
-        
+
         // Deposit collateral
         token1.mint(user1, depositAmount1);
         token2.mint(user1, depositAmount2);
         token3.mint(user1, depositAmount3);
-        
+
         vm.startPrank(user1);
         token1.approve(address(diamond), depositAmount1);
         token2.approve(address(diamond), depositAmount2);
         token3.approve(address(diamond), depositAmount3);
-        
+
         protocolF.depositCollateral(address(token1), depositAmount1);
         protocolF.depositCollateral(address(token2), depositAmount2);
         protocolF.depositCollateral(address(token3), depositAmount3);
         vm.stopPrank();
-        
+
         uint256 positionId = positionManagerF.getPositionIdForUser(user1);
-        
+
         // Calculate expected value
         // token1: 2 * $1500 = $3000
         // token2: 10 * $300 = $3000
         // token3: 1000 * $1 = $1000
         // Total = $7000
         uint256 expectedValue = 7000 * 1e18; // the value is returned with 18 decimals
-        
+
         uint256 collateralValue = protocolF.getPositionCollateralValue(positionId);
         assertEq(collateralValue, expectedValue);
     }
 
-    function depositCollateralFor(address _user, address _token, uint256 _amount) internal returns (uint256 positionId) {
+    function depositCollateralFor(address _user, address _token, uint256 _amount)
+        internal
+        returns (uint256 positionId)
+    {
         token1.mint(_user, _amount);
         vm.startPrank(_user);
         ERC20Mock(_token).approve(address(diamond), _amount);
         protocolF.depositCollateral(_token, _amount);
         vm.stopPrank();
         positionId = positionManagerF.getPositionIdForUser(_user);
+    }
+
+    function createVaultAndFund(uint256 _amount) internal {
+        (address _token4, address _pricefeed4) = deployERC20ContractAndAddPriceFeed("SupToken", 6, 250);
+        token4 = ERC20Mock(_token4);
+        pricefeed4 = _pricefeed4;
+
+        // address _vault =
+        vaultManagerF.deployVault(address(token4), pricefeed4, "xSToken", "xSTK", defaultConfig);
+
+        token4.mint(address(this), _amount);
+        token4.approve(address(vaultManagerF), _amount);
+
+        vaultManagerF.deposit(_token4, _amount);
     }
 
     function generateSelectors(string memory _facetName) internal returns (bytes4[] memory selectors) {

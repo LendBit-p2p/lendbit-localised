@@ -27,13 +27,15 @@ enum RequestStatus {
     PENDING,
     FULFILLED,
     REJECTED,
-    REPAID
+    REPAID,
+    LIQUIDATED
 }
 
 struct BorrowDetails {
     uint256 positionId;
-    string currency;
+    address token;
     uint256 amount;
+    uint256 totalRepayment;
     uint256 startTime; // timestamp
     RequestStatus status;
 }

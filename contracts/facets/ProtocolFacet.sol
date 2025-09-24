@@ -30,10 +30,15 @@ contract ProtocolFacet {
         s._withdrawCollateral(_token, _amount);
     }
 
-    function borrowCurrency(string calldata _currency, uint256 _amount) external {
+     function borrow(address _token, uint256 _amount) external returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        s._borrowCurrency(_currency, _amount);
+        return s._borrow(_token, _amount);
     }
+
+    // function borrowCurrency(string calldata _currency, uint256 _amount) external {
+    //     LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+    //     s._borrowCurrency(_currency, _amount);
+    // }
 
     /**
      * @notice Add a token as accepted collateral (only security council)
@@ -114,11 +119,6 @@ contract ProtocolFacet {
     function getHealthFactor(uint256 _positionId, uint256 _currentBorrowValue) external view returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._getHealthFactor(_positionId, _currentBorrowValue);
-    }
-
-    function getTokenValueInUSD(address _token, uint256 _amount) external view returns (uint256) {
-        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        return s._getTokenValueInUSD(_token, _amount);
     }
 
     // Modifiers

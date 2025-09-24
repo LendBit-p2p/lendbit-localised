@@ -23,12 +23,13 @@ contract VaultManagerFacet {
 
     function deployVault(
         address _token,
+        address _pricefeed,
         string calldata _name,
         string calldata _symbol,
         VaultConfiguration calldata _config
     ) external onlySecurityCouncil returns (address) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        return s._deployVault(_token, _name, _symbol, _config);
+        return s._deployVault(_token, _pricefeed, _name, _symbol, _config);
     }
 
     function pauseTokenSupport(address _token) external onlySecurityCouncil {

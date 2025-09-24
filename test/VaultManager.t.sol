@@ -152,7 +152,7 @@ contract PositionManagerTest is Base, IDiamondCut {
 
     function testDeployVault() public {
         address _token = address(0x123);
-        address _tokenVault = vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
+        address _tokenVault = vaultManagerF.deployVault(_token, address(0xdead), "Test token", "TesT", defaultConfig);
         assertTrue(vaultManagerF.tokenIsSupported(_token));
         assertEq(_tokenVault, vaultManagerF.getTokenVault(_token));
     }
@@ -161,19 +161,19 @@ contract PositionManagerTest is Base, IDiamondCut {
         address _token = address(0x123);
         vm.expectEmit(true, false, true, true);
         emit TokenAdded(_token, address(0));
-        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
+        vaultManagerF.deployVault(_token, address(0xdead), "Test token", "TesT", defaultConfig);
     }
 
     function testOnlyContractOwnerCanDeployVault() public {
         address _token = address(0x123);
         vm.startPrank(linkHolder);
         vm.expectRevert(abi.encodeWithSelector(ONLY_SECURITY_COUNCIL.selector));
-        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
+        vaultManagerF.deployVault(_token, address(0xdead), "Test token", "TesT", defaultConfig);
     }
 
     function testPauseTokenSupport() public {
         address _token = address(0x123);
-        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
+        vaultManagerF.deployVault(_token, address(0xdead), "Test token", "TesT", defaultConfig);
 
         vaultManagerF.pauseTokenSupport(_token);
         assertFalse(vaultManagerF.tokenIsSupported(_token));
@@ -181,7 +181,7 @@ contract PositionManagerTest is Base, IDiamondCut {
 
     function testOnlyContractOwnerCanPauseTokenSupport() public {
         address _token = address(0x123);
-        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
+        vaultManagerF.deployVault(_token, address(0xdead), "Test token", "TesT", defaultConfig);
 
         vm.startPrank(linkHolder);
         vm.expectRevert(abi.encodeWithSelector(ONLY_SECURITY_COUNCIL.selector));
@@ -190,7 +190,7 @@ contract PositionManagerTest is Base, IDiamondCut {
 
     function testResumeTokenSupport() public {
         address _token = address(0x123);
-        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
+        vaultManagerF.deployVault(_token, address(0xdead), "Test token", "TesT", defaultConfig);
         vaultManagerF.pauseTokenSupport(_token);
 
         vaultManagerF.resumeTokenSupport(_token);
@@ -199,7 +199,7 @@ contract PositionManagerTest is Base, IDiamondCut {
 
     function testOnlyContractOwnerCanResumeTokenSupport() public {
         address _token = address(0x123);
-        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
+        vaultManagerF.deployVault(_token, address(0xdead), "Test token", "TesT", defaultConfig);
         vaultManagerF.pauseTokenSupport(_token);
 
         vm.startPrank(linkHolder);
@@ -219,7 +219,7 @@ contract PositionManagerTest is Base, IDiamondCut {
     function testCannotAddAddressZeroAsSupportedToken() public {
         address _token = address(0);
         vm.expectRevert(abi.encodeWithSelector(ADDRESS_ZERO.selector));
-        vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
+        vaultManagerF.deployVault(_token, address(0xdead), "Test token", "TesT", defaultConfig);
     }
 
     function testCannotPauseAddressZeroAsSupportedToken() public {
@@ -236,24 +236,24 @@ contract PositionManagerTest is Base, IDiamondCut {
 
     function testCannotDeployVaultMultipleTimesForSameToken() public {
         address _token = address(0x123);
-        address _vaultToken = vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
+        address _vaultToken = vaultManagerF.deployVault(_token, address(0xdead), "Test token", "TesT", defaultConfig);
 
         vm.expectRevert(abi.encodeWithSelector(TOKEN_ALREADY_SUPPORTED.selector, _token, _vaultToken));
-        vaultManagerF.deployVault(_token, "Diff name", "Diff", defaultConfig);
+        vaultManagerF.deployVault(_token, address(0xdead), "Diff name", "Diff", defaultConfig);
     }
 
     function testCannotDeployVaultForTokensWithPausedSupport() public {
         address _token = address(0x123);
-        address _vaultToken = vaultManagerF.deployVault(_token, "Test token", "TesT", defaultConfig);
+        address _vaultToken = vaultManagerF.deployVault(_token, address(0xdead), "Test token", "TesT", defaultConfig);
         vaultManagerF.pauseTokenSupport(_token);
 
         vm.expectRevert(abi.encodeWithSelector(TOKEN_ALREADY_SUPPORTED.selector, _token, _vaultToken));
-        vaultManagerF.deployVault(_token, "Diff name", "Diff", defaultConfig);
+        vaultManagerF.deployVault(_token, address(0xdead), "Diff name", "Diff", defaultConfig);
     }
 
     function _deployVaults() internal {
-        tokenVault1 = TokenVault(payable(vaultManagerF.deployVault(address(token1), "Hodl Dai", "HDAI", defaultConfig)));
-        tokenVault2 = TokenVault(payable(vaultManagerF.deployVault(address(token2), "Hodl Xai", "HXAI", defaultConfig)));
+        tokenVault1 = TokenVault(payable(vaultManagerF.deployVault(address(token1), address(0xdead), "Hodl Dai", "HDAI", defaultConfig)));
+        tokenVault2 = TokenVault(payable(vaultManagerF.deployVault(address(token2), address(0xdead), "Hodl Xai", "HXAI", defaultConfig)));
     }
 
     function _deployErc20Tokens() internal {

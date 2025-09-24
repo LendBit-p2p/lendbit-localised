@@ -17,7 +17,18 @@ contract PriceOracleFacet {
         return s._getPriceData(_token);
     }
 
-    function initializePriceOracle(bytes32 _donID, address _router, address _linkToken, uint32 _gasLimit, uint64 _subscriptionId) external {
+    function getTokenValueInUSD(address _token, uint256 _amount) external view returns (uint256, uint256) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getTokenValueInUSD(_token, _amount);
+    }
+
+    function initializePriceOracle(
+        bytes32 _donID,
+        address _router,
+        address _linkToken,
+        uint32 _gasLimit,
+        uint64 _subscriptionId
+    ) external {
         LibDiamond.enforceIsContractOwner();
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         s._initializePriceOracle(_donID, _router, _linkToken, _gasLimit, _subscriptionId);
