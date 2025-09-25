@@ -617,6 +617,7 @@ contract ProtocolTest is Base, IDiamondCut {
         uint256 _borrowId = protocolF.borrow(address(token4), _borrowAmount);
         vm.stopPrank();
 
+        assertEq(_borrowId, 1);
         assertLt(protocolF.getPositionCollateralValue(_positionId), _positionCollateral);
         assertEq(token4.balanceOf(user1), _borrowAmount);
     }

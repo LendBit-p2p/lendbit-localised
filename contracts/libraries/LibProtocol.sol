@@ -201,8 +201,6 @@ library LibProtocol {
         return _loanUSDValue * Constants.BASIS_POINTS_SCALE / Constants.COLLATERALIZATION_RATIO; // 125% of the amount being borrowed
     }
 
-    event Amount(uint256 amount, uint256 amount2);
-
     function _lockCollateral(
         LibAppStorage.StorageLayout storage s,
         uint256 _positionId,
@@ -218,8 +216,7 @@ library LibProtocol {
             // Get price per token (not total USD value)
 
             (uint256 _pricePerToken, uint256 _userCollateralUSD) = s._getTokenValueInUSD(_token, _userCollateral);
-
-            // emit Amount(_userCollateralUSD, _collateralToLock);
+            uint8 _pricefeedDecimals = s._getPriceDecimals(_token);
 
             uint256 _amountToLockUSD;
             if (_userCollateralUSD >= _collateralToLock) {
@@ -232,9 +229,7 @@ library LibProtocol {
             }
 
             // Convert USD amount to token amount
-            uint256 _amountToLock = _amountToLockUSD * (10 ** _decimalToken) / LibUtils._noramlizeToNDecimals(_pricePerToken, 8, 18); //Constants.PRECISION;
-
-            emit Amount(_amountToLock, _amountToLockUSD);
+            uint256 _amountToLock = _amountToLockUSD * (10 ** _decimalToken) / LibUtils._noramlizeToNDecimals(_pricePerToken, _pricefeedDecimals, Constants.PRECISION_SCALE);
 
             // Store the locked amount for each collateral token
             s.s_borrowLockedCollateral[_borrowId][_token] += _amountToLock;

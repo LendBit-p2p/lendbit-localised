@@ -68,7 +68,6 @@ library LibPriceOracle {
         if (_price <= 0) revert INVALID_PRICE_FEED(_token);
 
         // Normalize to 10 decimals
-        // uint8 _decimals = _getPriceDecimals(s, _token);
         uint8 _decimals = LibUtils._getTokenDecimals(_token);
         uint256 _usdValue = _calculateTokenUSDEquivalent(_decimals, _price, _amount);
 
@@ -81,7 +80,7 @@ library LibPriceOracle {
         returns (uint256 _usdValue)
     {
         if (_amount == 0) return _usdValue;
-        // _usdValue = (_price * Constants.PRICE_PRECISION * _amount) / (10 ** _decimals);
+
         uint256 scaledPrice = _price * (10 ** (Constants.PRECISION_SCALE - 8)); // e.g., 1e10 if PRECISION is 1e18
         _usdValue = (scaledPrice * _amount) / (10 ** _decimals);
     }
