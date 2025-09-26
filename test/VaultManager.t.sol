@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {ERC20Mock} from "@chainlink/contracts/src/v0.8/shared/mocks/ERC20Mock.sol";
 
 import "../contracts/interfaces/IDiamondCut.sol";
 import "../contracts/facets/DiamondCutFacet.sol";
@@ -16,83 +16,15 @@ import "../contracts/models/Error.sol";
 import "../contracts/models/Event.sol";
 
 import {TokenVault} from "../contracts/TokenVault.sol";
-import {Helpers} from "./Helpers.sol";
 
-contract PositionManagerTest is Base, IDiamondCut {
-    //contract types of facets to be deployed
-    Diamond diamond;
-    DiamondCutFacet dCutFacet;
-    DiamondLoupeFacet dLoupe;
-    OwnershipFacet ownerF;
-    VaultManagerFacet vaultManagerF;
-
+contract PositionManagerTest is Base {
     address linkHolder = 0x4281eCF07378Ee595C564a59048801330f3084eE; //sepolia
-
-    //some test tokens
-    ERC20Mock token1;
-    ERC20Mock token2;
 
     TokenVault tokenVault1;
     TokenVault tokenVault2;
 
-    address user1 = mkaddr("user1");
-    address user2 = mkaddr("user2");
-
-    VaultConfiguration defaultConfig = VaultConfiguration({
-        totalDeposits: 0,
-        totalBorrows: 0,
-        baseRate: 500,
-        slopeRate: 1500,
-        reserveFactor: 2000,
-        optimalUtilization: 7500,
-        lastUpdated: block.timestamp
-    });
-
-    function setUp() public {
-        //deploy facets
-        dCutFacet = new DiamondCutFacet();
-        diamond = new Diamond(address(this), address(dCutFacet));
-        dLoupe = new DiamondLoupeFacet();
-        ownerF = new OwnershipFacet();
-        vaultManagerF = new VaultManagerFacet();
-
-        //upgrade diamond with facets
-
-        //build cut struct
-        FacetCut[] memory cut = new FacetCut[](3);
-
-        cut[0] = (
-            FacetCut({
-                facetAddress: address(dLoupe),
-                action: FacetCutAction.Add,
-                functionSelectors: generateSelectors("DiamondLoupeFacet")
-            })
-        );
-
-        cut[1] = (
-            FacetCut({
-                facetAddress: address(ownerF),
-                action: FacetCutAction.Add,
-                functionSelectors: generateSelectors("OwnershipFacet")
-            })
-        );
-
-        cut[2] = (
-            FacetCut({
-                facetAddress: address(vaultManagerF),
-                action: FacetCutAction.Add,
-                functionSelectors: generateSelectors("VaultManagerFacet")
-            })
-        );
-
-        vaultManagerF = VaultManagerFacet(address(diamond));
-
-        //upgrade diamond
-        IDiamondCut(address(diamond)).diamondCut(cut, address(0x0), "");
-
-        //call a function
-        DiamondLoupeFacet(address(diamond)).facetAddresses();
-
+    function setUp() public override {
+        super.setUp();
         _deployErc20Tokens();
         _deployVaults();
     }
@@ -254,23 +186,16 @@ contract PositionManagerTest is Base, IDiamondCut {
     }
 
     function _deployVaults() internal {
-        tokenVault1 = TokenVault(payable(vaultManagerF.deployVault(address(token1), address(0xdead), "Hodl Dai", "HDAI", defaultConfig)));
-        tokenVault2 = TokenVault(payable(vaultManagerF.deployVault(address(token2), address(0xdead), "Hodl Xai", "HXAI", defaultConfig)));
+        tokenVault1 = TokenVault(
+            payable(vaultManagerF.deployVault(address(token1), address(0xdead), "Hodl Dai", "HDAI", defaultConfig))
+        );
+        tokenVault2 = TokenVault(
+            payable(vaultManagerF.deployVault(address(token2), address(0xdead), "Hodl Xai", "HXAI", defaultConfig))
+        );
     }
 
     function _deployErc20Tokens() internal {
-        token1 = new ERC20Mock();
-        token2 = new ERC20Mock();
+        token1 = new ERC20Mock(18);
+        token2 = new ERC20Mock(18);
     }
-
-    function generateSelectors(string memory _facetName) internal returns (bytes4[] memory selectors) {
-        string[] memory cmd = new string[](3);
-        cmd[0] = "node";
-        cmd[1] = "scripts/genSelectors.js";
-        cmd[2] = _facetName;
-        bytes memory res = vm.ffi(cmd);
-        selectors = abi.decode(res, (bytes4[]));
-    }
-
-    function diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata) external override {}
 }

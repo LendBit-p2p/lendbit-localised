@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import "./Base.t.sol";
+import {Base, ERC20Mock} from "./Base.t.sol";
 import "../contracts/interfaces/IDiamondCut.sol";
 import "../contracts/facets/DiamondCutFacet.sol";
 import "../contracts/facets/DiamondLoupeFacet.sol";
@@ -18,17 +18,9 @@ import {IFunctionsSubscriptions} from
 import {IFunctionsRouter} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/interfaces/IFunctionsRouter.sol";
 import {FunctionsResponse} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsResponse.sol";
 
-contract PriceOracleTest is Base, IDiamondCut {
+contract PriceOracleTest is Base {
     uint256 baseMainnetFork;
     uint256 baseSepoliaFork;
-
-    //contract types of facets to be deployed
-    Diamond diamond;
-    DiamondCutFacet dCutFacet;
-    DiamondLoupeFacet dLoupe;
-    OwnershipFacet ownerF;
-    ProtocolFacet protocolF;
-    PriceOracleFacet priceOracleF;
 
     uint64 subscriptionId = 438;
     address subOwner = 0xb159588fc04378B8334BA49593aAa3966663ACe1;
@@ -46,86 +38,29 @@ contract PriceOracleTest is Base, IDiamondCut {
         "headers: {'API-Key': secrets.apiKey}" "})" "if (apiResponse.error) {" "console.error(apiResponse.error)"
         "throw Error('Request failed')" "}" "const { data } = apiResponse;" "return Functions.encodeString(data.data)";
 
-    address token1;
-    address token2;
-
-    address pricefeed1;
-    address pricefeed2;
-
-    function setUp() public {
+    function setUp() public override {
         // baseMainnetFork = vm.createFork(vm.envString("BASE_MAINNET_URL"));
         // baseSepoliaFork = vm.createFork(vm.envString("BASE_SEPOLIA_URL"));
         // vm.selectFork(baseSepoliaFork);
 
-        //deploy facets
-        dCutFacet = new DiamondCutFacet();
-        diamond = new Diamond(address(this), address(dCutFacet));
-        dLoupe = new DiamondLoupeFacet();
-        ownerF = new OwnershipFacet();
-        protocolF = new ProtocolFacet();
-        priceOracleF = new PriceOracleFacet();
-
-        //upgrade diamond with facets
-
-        //build cut struct
-        FacetCut[] memory cut = new FacetCut[](4);
-
-        cut[0] = (
-            FacetCut({
-                facetAddress: address(dLoupe),
-                action: FacetCutAction.Add,
-                functionSelectors: generateSelectors("DiamondLoupeFacet")
-            })
-        );
-
-        cut[1] = (
-            FacetCut({
-                facetAddress: address(ownerF),
-                action: FacetCutAction.Add,
-                functionSelectors: generateSelectors("OwnershipFacet")
-            })
-        );
-
-        cut[2] = (
-            FacetCut({
-                facetAddress: address(protocolF),
-                action: FacetCutAction.Add,
-                functionSelectors: generateSelectors("ProtocolFacet")
-            })
-        );
-
-        cut[3] = (
-            FacetCut({
-                facetAddress: address(priceOracleF),
-                action: FacetCutAction.Add,
-                functionSelectors: generateSelectors("PriceOracleFacet")
-            })
-        );
-
-        protocolF = ProtocolFacet(address(diamond));
-        priceOracleF = PriceOracleFacet(address(diamond));
-
-        //upgrade diamond
-        IDiamondCut(address(diamond)).diamondCut(cut, address(0x0), "");
+        super.setUp();
 
         // priceOracleF.initializePriceOracle(baseDonId, baseRouter, linkToken, 300000, subscriptionId);
         // priceOracleF.setupSource(source);
         // addContractAsConsumer();
-        deployPriceFeed();
-        addCollateralTokens();
     }
 
     function testGetPriceData() public view {
-        (bool _isStale, uint256 _price) = priceOracleF.getPriceData(token1);
+        (bool _isStale, uint256 _price) = priceOracleF.getPriceData(address(token1));
         assertFalse(_isStale);
-        assertEq(_price, 2000 * 1e8);
+        assertEq(_price, 1500 * 1e8);
     }
 
     function testGetTokenValueInUSD() public view {
         uint256 _amount = 1000 * 1e18;
 
         (, uint256 _tokenValue) = priceOracleF.getTokenValueInUSD(address(token1), _amount);
-        assertEq(_tokenValue, (_amount * 2000));
+        assertEq(_tokenValue, (_amount * 1500));
     }
 
     function testGetPriceDataFailForUnsupportedTokens() public {
@@ -134,12 +69,13 @@ contract PriceOracleTest is Base, IDiamondCut {
         priceOracleF.getPriceData(_token);
     }
 
-    function testGetTokenValueInUSDForDifferentDecimals() public view {
+    function testGetTokenValueInUSDForDifferentDecimals() public {
+        protocolF.addCollateralToken(address(token3), pricefeed3);
         uint256 _amount = 1000 * 1e6; // token2 has 6 decimals
 
         // Test with token2 which has 6 decimals and price $1
         uint256 expectedValue = (_amount * 1e12); // Should be normalized to 18 decimals
-        (, uint256 actualValue) = priceOracleF.getTokenValueInUSD(address(token2), _amount);
+        (, uint256 actualValue) = priceOracleF.getTokenValueInUSD(address(token3), _amount);
         assertEq(actualValue, expectedValue, "Token3 USD value should be normalized correctly");
     }
 
@@ -223,29 +159,18 @@ contract PriceOracleTest is Base, IDiamondCut {
     // }
 
     function addCollateralTokens() internal {
-        protocolF.addCollateralToken(token1, pricefeed1);
-        protocolF.addCollateralToken(token2, pricefeed2);
+        protocolF.addCollateralToken(address(token1), pricefeed1);
+        protocolF.addCollateralToken(address(token2), pricefeed2);
     }
 
     function deployPriceFeed() internal {
         (address _token1, address _pricefeed1) = deployERC20ContractAndAddPriceFeed("token1", 18, 2000);
         (address _token2, address _pricefeed2) = deployERC20ContractAndAddPriceFeed("token2", 6, 1);
 
-        token1 = _token1;
-        token2 = _token2;
+        token1 = ERC20Mock(_token1);
+        token2 = ERC20Mock(_token2);
 
         pricefeed1 = _pricefeed1;
         pricefeed2 = _pricefeed2;
     }
-
-    function generateSelectors(string memory _facetName) internal returns (bytes4[] memory selectors) {
-        string[] memory cmd = new string[](3);
-        cmd[0] = "node";
-        cmd[1] = "scripts/genSelectors.js";
-        cmd[2] = _facetName;
-        bytes memory res = vm.ffi(cmd);
-        selectors = abi.decode(res, (bytes4[]));
-    }
-
-    function diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata) external override {}
 }
