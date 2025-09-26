@@ -6,6 +6,7 @@ import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {LibProtocol} from "../libraries/LibProtocol.sol";
 
 import "../models/Error.sol";
+import {BorrowDetails} from "../models/Protocol.sol";
 
 contract ProtocolFacet {
     using LibProtocol for LibAppStorage.StorageLayout;
@@ -33,6 +34,11 @@ contract ProtocolFacet {
      function borrow(address _token, uint256 _amount) external returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._borrow(_token, _amount);
+    }
+
+    function repay(uint256 _borrowId, uint256 _amount) external returns (uint256) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._repay(_borrowId, _amount);
     }
 
     // function borrowCurrency(string calldata _currency, uint256 _amount) external {
@@ -119,6 +125,11 @@ contract ProtocolFacet {
     function getHealthFactor(uint256 _positionId, uint256 _currentBorrowValue) external view returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._getHealthFactor(_positionId, _currentBorrowValue);
+    }
+
+    function getBorrowDetails(uint256 _borrowId) external view returns (BorrowDetails memory) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s.s_borrowDetails[_borrowId];
     }
 
     // Modifiers

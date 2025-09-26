@@ -20,6 +20,8 @@ error INSUFFICIENT_BALANCE();
 error HEALTH_FACTOR_TOO_LOW(uint256 _healthFactor);
 
 error TOKEN_OVERUTILIZATION();
+error NOT_BORROW_OWNER();
+error INVALID_BORROW_ID(uint256 borrowId);
 
 error EMPTY_STRING();
 error CURRENCY_ALREADY_SUPPORTED(string _currency);

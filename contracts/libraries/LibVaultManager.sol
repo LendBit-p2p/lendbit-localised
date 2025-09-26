@@ -87,8 +87,10 @@ library LibVaultManager {
         s.s_tokenVaultConfig[_token] = VaultConfiguration({
             totalDeposits: 0,
             totalBorrows: 0,
-            interestRate: _config.interestRate,
-            utilizationRate: _config.utilizationRate,
+            reserveFactor: _config.reserveFactor,
+            baseRate: _config.baseRate,
+            slopeRate: _config.slopeRate,
+            optimalUtilization: _config.optimalUtilization,
             lastUpdated: block.timestamp
         });
 
@@ -108,6 +110,22 @@ library LibVaultManager {
         uint256 _maxAmount = _config.totalDeposits * Constants.MAX_UTILIZATION / Constants.BASIS_POINTS_SCALE;
 
         return _borrows < _maxAmount;
+    }
+
+    function _updateVaultBorrows(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount) internal {
+        VaultConfiguration storage _vaultConfig = s.s_tokenVaultConfig[_token];
+        _vaultConfig.totalBorrows += _amount;
+        _vaultConfig.lastUpdated = block.timestamp;
+    }
+
+    function _updateVaultRepays(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount) internal {
+        VaultConfiguration storage _vaultConfig = s.s_tokenVaultConfig[_token];
+        if (_amount > _vaultConfig.totalBorrows) {
+            _vaultConfig.totalBorrows = 0;
+        } else {
+            _vaultConfig.totalBorrows -= _amount;
+        }
+        _vaultConfig.lastUpdated = block.timestamp;
     }
 
     function _pauseTokenSupport(LibAppStorage.StorageLayout storage s, address _token) internal {

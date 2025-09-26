@@ -17,8 +17,10 @@ enum KYCTier {
 struct VaultConfiguration {
     uint256 totalDeposits;
     uint256 totalBorrows;
-    uint256 interestRate; // in basis points
-    uint256 utilizationRate; // in basis points
+    uint256 reserveFactor; // in basis points
+    uint256 optimalUtilization; // in basis points
+    uint256 baseRate; // in basis points
+    uint256 slopeRate; // in basis points
     uint256 lastUpdated; // timestamp
 }
 

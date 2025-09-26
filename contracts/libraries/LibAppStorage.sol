@@ -36,6 +36,7 @@ library LibAppStorage {
 
         // borrow tracking
         mapping(uint256 => mapping(address => uint256)) s_positionBorrowed; // PositionID -> (token address -> Amount)
+        mapping(uint256 => mapping(address => uint256)) s_positionBorrowedLastUpdate; // PositionID -> (token address -> timestamp)
     
 
         // Chainlink functions variables

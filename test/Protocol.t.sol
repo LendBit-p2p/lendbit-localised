@@ -16,7 +16,7 @@ import "../contracts/Diamond.sol";
 
 import "../contracts/models/Error.sol";
 import "../contracts/models/Event.sol";
-import {VaultConfiguration} from "../contracts/models/Protocol.sol";
+import {BorrowDetails, RequestStatus, VaultConfiguration} from "../contracts/models/Protocol.sol";
 import {Base} from "./Base.t.sol";
 
 contract ProtocolTest is Base, IDiamondCut {
@@ -48,9 +48,11 @@ contract ProtocolTest is Base, IDiamondCut {
     VaultConfiguration defaultConfig = VaultConfiguration({
         totalDeposits: 0,
         totalBorrows: 0,
-        interestRate: 500,
-        utilizationRate: 7500,
-        lastUpdated: 0
+        baseRate: 500,
+        slopeRate: 1500,
+        reserveFactor: 2000,
+        optimalUtilization: 7500,
+        lastUpdated: block.timestamp
     });
 
     function setUp() public {
@@ -602,7 +604,7 @@ contract ProtocolTest is Base, IDiamondCut {
     function testBorrow() public {
         createVaultAndFund(1000000e18);
         uint256 _collateralAmount = 10000 * 1e18; // $15M worth of token1 (10k * $1500)
-        uint256 _borrowAmount = 1000 * 1e6; // $250k worth of token2 (1k * $250)
+        uint256 _borrowAmount = 1000 * 1e6; // $250k worth of token4 (1k * $250)
 
         // Deposit collateral first
         token1.mint(user1, _collateralAmount);
@@ -619,6 +621,7 @@ contract ProtocolTest is Base, IDiamondCut {
 
         assertEq(_borrowId, 1);
         assertLt(protocolF.getPositionCollateralValue(_positionId), _positionCollateral);
+        assertEq(protocolF.getPositionBorrowedValue(_positionId), 250000e18);
         assertEq(token4.balanceOf(user1), _borrowAmount);
     }
 
@@ -638,6 +641,140 @@ contract ProtocolTest is Base, IDiamondCut {
         vm.startPrank(user1);
         vm.expectRevert(abi.encodeWithSelector(TOKEN_NOT_SUPPORTED.selector, address(token3)));
         protocolF.borrow(address(token3), 1000 * 1e18);
+        vm.stopPrank();
+    }
+
+    function testRepaySuccess() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 borrowId = protocolF.borrow(address(token4), borrowAmount);
+
+        // Mint tokens to user1 for repayment
+        token4.mint(user1, borrowAmount);
+        token4.approve(address(diamond), borrowAmount);
+
+        // Repay full amount
+        uint256 remainingDebt = protocolF.repay(borrowId, borrowAmount);
+        BorrowDetails memory _borrowDetails = protocolF.getBorrowDetails(borrowId);
+
+        assertEq(remainingDebt, 0, "Debt should be zero after full repayment");
+        assertEq(uint8(_borrowDetails.status), uint8(RequestStatus.REPAID), "Borrow status should be REPAID");
+        vm.stopPrank();
+    }
+
+    function testRepayPartial() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 borrowId = protocolF.borrow(address(token4), borrowAmount);
+
+        // Mint tokens to user1 for partial repayment
+        uint256 partialRepay = borrowAmount / 2;
+        token4.mint(user1, partialRepay);
+        token4.approve(address(diamond), partialRepay);
+
+        uint256 remainingDebt = protocolF.repay(borrowId, partialRepay);
+
+        BorrowDetails memory _borrowDetails = protocolF.getBorrowDetails(borrowId);
+
+        assertGt(remainingDebt, 0, "Debt should remain after partial repayment");
+        assertLt(remainingDebt, borrowAmount, "Debt should be less than initial borrow");
+        assertEq(uint8(_borrowDetails.status), uint8(RequestStatus.FULFILLED), "Borrow status should be REPAID");
+        vm.stopPrank();
+    }
+
+    function testRepayFailsForInvalidBorrowId() public {
+        vm.startPrank(user1);
+        vm.expectRevert(abi.encodeWithSelector(INVALID_BORROW_ID.selector, 999));
+        protocolF.repay(999, 1000);
+        vm.stopPrank();
+    }
+
+    function testRepayFailsForNotBorrowOwner() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+        depositCollateralFor(user2, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 borrowId = protocolF.borrow(address(token4), borrowAmount);
+        vm.stopPrank();
+
+        // Try to repay as another user
+        vm.startPrank(user2);
+        token4.mint(user2, borrowAmount);
+        token4.approve(address(diamond), borrowAmount);
+
+        vm.expectRevert(abi.encodeWithSelector(NOT_BORROW_OWNER.selector));
+        protocolF.repay(borrowId, borrowAmount);
+        vm.stopPrank();
+    }
+
+    function testRepayFailsForInsufficientAllowance() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 borrowId = protocolF.borrow(address(token4), borrowAmount);
+
+        // Mint tokens but do not approve
+        token4.mint(user1, borrowAmount);
+
+        vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_ALLOWANCE.selector));
+        protocolF.repay(borrowId, borrowAmount);
+        vm.stopPrank();
+    }
+
+    function testRepayFailsForInsufficientBalance() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 borrowId = protocolF.borrow(address(token4), borrowAmount);
+        token4.transfer(user2, borrowAmount); // reduce token balance for user1
+
+        // Approve but do not mint enough tokens
+        token4.approve(address(diamond), borrowAmount);
+
+        vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_BALANCE.selector));
+        protocolF.repay(borrowId, borrowAmount);
+        vm.stopPrank();
+    }
+
+    function testRepayMoreThanDebt() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 borrowId = protocolF.borrow(address(token4), borrowAmount);
+
+        // Mint and approve more than debt
+        token4.mint(user1, borrowAmount * 2);
+        token4.approve(address(diamond), borrowAmount * 2);
+
+        uint256 remainingDebt = protocolF.repay(borrowId, borrowAmount * 2);
+
+        assertEq(remainingDebt, 0, "Debt should be zero after over-repayment");
         vm.stopPrank();
     }
 
@@ -1033,6 +1170,11 @@ contract ProtocolTest is Base, IDiamondCut {
         protocolF.depositCollateral(_token, _amount);
         vm.stopPrank();
         positionId = positionManagerF.getPositionIdForUser(_user);
+    }
+
+    function mintTokenTo(address _token, address _user, uint256 _amount) internal {
+        ERC20Mock token = ERC20Mock(_token);
+        token.mint(_user, _amount);
     }
 
     function createVaultAndFund(uint256 _amount) internal {

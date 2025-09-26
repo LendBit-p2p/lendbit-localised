@@ -41,9 +41,11 @@ contract PositionManagerTest is Base, IDiamondCut {
     VaultConfiguration defaultConfig = VaultConfiguration({
         totalDeposits: 0,
         totalBorrows: 0,
-        interestRate: 500,
-        utilizationRate: 7500,
-        lastUpdated: 0
+        baseRate: 500,
+        slopeRate: 1500,
+        reserveFactor: 2000,
+        optimalUtilization: 7500,
+        lastUpdated: block.timestamp
     });
 
     function setUp() public {

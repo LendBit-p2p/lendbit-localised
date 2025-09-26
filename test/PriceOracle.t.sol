@@ -134,7 +134,7 @@ contract PriceOracleTest is Base, IDiamondCut {
         priceOracleF.getPriceData(_token);
     }
 
-    function testGetTokenValueInUSDForDifferentDecimals() public {
+    function testGetTokenValueInUSDForDifferentDecimals() public view {
         uint256 _amount = 1000 * 1e6; // token2 has 6 decimals
 
         // Test with token2 which has 6 decimals and price $1
