@@ -117,6 +117,11 @@ contract ProtocolFacet {
         return s._getPositionCollateralValue(_positionId);
     }
 
+    function getPositionLockedCollateralValue(uint256 _positionId) external view returns (uint256) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getPositionLockedCollateralValue(_positionId);
+    }
+
     function getPositionBorrowedValue(uint256 _positionId) external view returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._getPositionBorrowedValue(_positionId);

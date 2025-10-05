@@ -485,13 +485,13 @@ contract ProtocolTest is Base {
         protocolF.depositCollateral(address(token1), _collateralAmount);
 
         uint256 _positionId = positionManagerF.getPositionIdForUser(user1);
-        uint256 _positionCollateral = protocolF.getPositionCollateralValue(_positionId);
+        uint256 _positionCollateral = protocolF.getPositionLockedCollateralValue(_positionId);
 
         uint256 _borrowId = protocolF.borrow(address(token4), _borrowAmount);
         vm.stopPrank();
 
         assertEq(_borrowId, 1);
-        assertLt(protocolF.getPositionCollateralValue(_positionId), _positionCollateral);
+        assertGt(protocolF.getPositionLockedCollateralValue(_positionId), _positionCollateral);
         assertEq(protocolF.getPositionBorrowedValue(_positionId), 250000e18);
         assertEq(token4.balanceOf(user1), _borrowAmount);
     }
@@ -525,6 +525,8 @@ contract ProtocolTest is Base {
         vm.startPrank(user1);
         uint256 borrowId = protocolF.borrow(address(token4), borrowAmount);
 
+        uint256 _vaultBalance = token4.balanceOf(vault);
+
         // Mint tokens to user1 for repayment
         token4.mint(user1, borrowAmount);
         token4.approve(address(diamond), borrowAmount);
@@ -535,6 +537,7 @@ contract ProtocolTest is Base {
 
         assertEq(remainingDebt, 0, "Debt should be zero after full repayment");
         assertEq(uint8(_borrowDetails.status), uint8(RequestStatus.REPAID), "Borrow status should be REPAID");
+        assertEq(token4.balanceOf(vault), _vaultBalance + borrowAmount);
         vm.stopPrank();
     }
 
@@ -1029,36 +1032,5 @@ contract ProtocolTest is Base {
 
         uint256 collateralValue = protocolF.getPositionCollateralValue(positionId);
         assertEq(collateralValue, expectedValue);
-    }
-
-    function depositCollateralFor(address _user, address _token, uint256 _amount)
-        internal
-        returns (uint256 positionId)
-    {
-        token1.mint(_user, _amount);
-        vm.startPrank(_user);
-        ERC20Mock(_token).approve(address(diamond), _amount);
-        protocolF.depositCollateral(_token, _amount);
-        vm.stopPrank();
-        positionId = positionManagerF.getPositionIdForUser(_user);
-    }
-
-    function mintTokenTo(address _token, address _user, uint256 _amount) internal {
-        ERC20Mock token = ERC20Mock(_token);
-        token.mint(_user, _amount);
-    }
-
-    function createVaultAndFund(uint256 _amount) internal {
-        (address _token4, address _pricefeed4) = deployERC20ContractAndAddPriceFeed("SupToken", 6, 250);
-        token4 = ERC20Mock(_token4);
-        pricefeed4 = _pricefeed4;
-
-        // address _vault =
-        vaultManagerF.deployVault(address(token4), pricefeed4, "xSToken", "xSTK", defaultConfig);
-
-        token4.mint(address(this), _amount);
-        token4.approve(address(vaultManagerF), _amount);
-
-        vaultManagerF.deposit(_token4, _amount);
     }
 }

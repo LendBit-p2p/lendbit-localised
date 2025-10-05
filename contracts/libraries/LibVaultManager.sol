@@ -91,6 +91,7 @@ library LibVaultManager {
             baseRate: _config.baseRate,
             slopeRate: _config.slopeRate,
             optimalUtilization: _config.optimalUtilization,
+            liquidationBonus: _config.liquidationBonus,
             lastUpdated: block.timestamp
         });
 

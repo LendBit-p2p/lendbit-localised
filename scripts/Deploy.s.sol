@@ -15,9 +15,10 @@ import "../contracts/facets/PositionManagerFacet.sol";
 import "../contracts/facets/VaultManagerFacet.sol";
 import "../contracts/Diamond.sol";
 
-import {Test} from "forge-std/Test.sol";
+import {console} from "forge-std/console.sol";
+import {Script} from "forge-std/Script.sol";
 
-contract Base is Test, IDiamondCut {
+contract Deployment is Script, IDiamondCut {
     //contract types of facets to be deployed
     Diamond diamond;
     DiamondCutFacet dCutFacet;
@@ -30,21 +31,13 @@ contract Base is Test, IDiamondCut {
     LiquidationFacet liquidationF;
 
     // Test tokens
-    ERC20Mock token1;
-    ERC20Mock token2;
-    ERC20Mock token3;
-    ERC20Mock token4;
+    address token1;
+    address token2;
+    address token3; // borrow token
     address pricefeed1;
     address pricefeed2;
-    address pricefeed3;
-    address pricefeed4;
+    address pricefeed3; // borrow token pricefeed
 
-    address vault;
-
-    // Test addresses
-    address user1 = mkaddr("user1");
-    address user2 = mkaddr("user2");
-    address nonAdmin = mkaddr("nonAdmin");
 
     VaultConfiguration defaultConfig = VaultConfiguration({
         totalDeposits: 0,
@@ -53,14 +46,14 @@ contract Base is Test, IDiamondCut {
         slopeRate: 1500,
         reserveFactor: 2000,
         optimalUtilization: 7500,
-        liquidationBonus: 1000,
         lastUpdated: block.timestamp
     });
 
-    function setUp() public virtual {
+    function run() external {
+        vm.startBroadcast();
         //deploy facets
         dCutFacet = new DiamondCutFacet();
-        diamond = new Diamond(address(this), address(dCutFacet));
+        diamond = new Diamond(msg.sender, address(dCutFacet));
         dLoupe = new DiamondLoupeFacet();
         ownerF = new OwnershipFacet();
         protocolF = new ProtocolFacet();
@@ -68,6 +61,17 @@ contract Base is Test, IDiamondCut {
         vaultManagerF = new VaultManagerFacet();
         priceOracleF = new PriceOracleFacet();
         liquidationF = new LiquidationFacet();
+
+        console.log("Deployed Addresses:");
+        console.log("DiamondCutFacet: ", address(dCutFacet));
+        console.log("Diamond: ", address(diamond));
+        console.log("DiamondLoupeFacet: ", address(dLoupe));
+        console.log("OwnershipFacet: ", address(ownerF));
+        console.log("ProtocolFacet: ", address(protocolF));
+        console.log("PositionManagerFacet: ", address(positionManagerF));
+        console.log("VaultManagerFacet: ", address(vaultManagerF));
+        console.log("PriceOracleFacet: ", address(priceOracleF));
+        console.log("LiquidationFacet: ", address(liquidationF));   
 
         //upgrade diamond with facets
         //build cut struct
@@ -141,74 +145,33 @@ contract Base is Test, IDiamondCut {
         //call a function
         DiamondLoupeFacet(address(diamond)).facetAddresses();
 
-        // Deploy test tokens
-        (address _token1, address _pricefeed1) = deployERC20ContractAndAddPriceFeed("token1", 18, 1500);
-        (address _token2, address _pricefeed2) = deployERC20ContractAndAddPriceFeed("token2", 18, 300);
-        (address _token3, address _pricefeed3) = deployERC20ContractAndAddPriceFeed("token3", 6, 1);
+        token1 = 0xFaEc9cDC3Ef75713b48f46057B98BA04885e3391; // EURC
+        token2 = 0xb2b2130b4B83Af141cFc4C5E3dEB1897eB336D79; // LINK
+        token3 = 0xc4e08f4e2E50efF89B476c9416F0B7B607EDB71a; // address(new ERC20Mock(6)); // CNGN
 
-        token1 = ERC20Mock(_token1);
-        token2 = ERC20Mock(_token2);
-        token3 = ERC20Mock(_token3);
-
-        pricefeed1 = _pricefeed1;
-        pricefeed2 = _pricefeed2;
-        pricefeed3 = _pricefeed3;
+        pricefeed1 = 0xD1092a65338d049DB68D7Be6bD89d17a0929945e; // DAI/USD
+        pricefeed2 = 0xb113F5A928BCfF189C998ab20d753a47F9dE5A61; // LINK/USD
+        pricefeed3 = 0xe73b80A97C77982Fc2C99F47A5b4e3Be5463E084; // address(new MockV3Aggregator(8, 1500e8)); // CNGN/USD
 
         // Setup initial collateral tokens
-        _setupInitialCollateralTokens();
+        _setupInitialCollateralAndBorrowTokens();
+
+        positionManagerF.createPositionFor(msg.sender);
+        ERC20Mock(token3).mint(msg.sender, 500000e6); // mint 500000 CNGN to msg.sender
+        ERC20Mock(token3).approve(address(diamond), 500000e6);
+        protocolF.depositCollateral(token3, 500000e6);
+        vm.stopBroadcast();
+
+        console.log("MOCK CNGN: ", token3);
+        console.log("MOCK CNGN/USD: ", pricefeed3);
     }
 
-    function _setupInitialCollateralTokens() internal {
-        protocolF.addCollateralToken(address(token1), pricefeed1);
-        protocolF.addCollateralToken(address(token2), pricefeed2);
-    }
+    function _setupInitialCollateralAndBorrowTokens() internal {
+        protocolF.addCollateralToken(token1, pricefeed1);
+        protocolF.addCollateralToken(token2, pricefeed2);
+        protocolF.addCollateralToken(token3, pricefeed3);
 
-    function deployERC20ContractAndAddPriceFeed(string memory _name, uint8 _decimals, int256 _initialAnswer)
-        internal
-        returns (address, address)
-    {
-        ERC20Mock _erc20 = new ERC20Mock(_decimals);
-        MockV3Aggregator priceFeed = new MockV3Aggregator(8, _initialAnswer * 1e8);
-        vm.label(address(priceFeed), "Price Feed");
-        vm.label(address(_erc20), _name);
-        return (address(_erc20), address(priceFeed));
-    }
-
-    function depositCollateralFor(address _user, address _token, uint256 _amount)
-        internal
-        returns (uint256 positionId)
-    {
-        token1.mint(_user, _amount);
-        vm.startPrank(_user);
-        ERC20Mock(_token).approve(address(diamond), _amount);
-        protocolF.depositCollateral(_token, _amount);
-        vm.stopPrank();
-        positionId = positionManagerF.getPositionIdForUser(_user);
-    }
-
-    function mintTokenTo(address _token, address _user, uint256 _amount) internal {
-        ERC20Mock token = ERC20Mock(_token);
-        token.mint(_user, _amount);
-    }
-
-    function createVaultAndFund(uint256 _amount) internal {
-        (address _token4, address _pricefeed4) = deployERC20ContractAndAddPriceFeed("SupToken", 6, 250);
-        token4 = ERC20Mock(_token4);
-        pricefeed4 = _pricefeed4;
-
-        // address _vault =
-        vault = vaultManagerF.deployVault(address(token4), pricefeed4, "xSToken", "xSTK", defaultConfig);
-
-        token4.mint(address(this), _amount);
-        token4.approve(address(vaultManagerF), _amount);
-
-        vaultManagerF.deposit(_token4, _amount);
-    }
-
-    function mkaddr(string memory name) public returns (address) {
-        address addr = address(uint160(uint256(keccak256(abi.encodePacked(name)))));
-        vm.label(addr, name);
-        return addr;
+        vaultManagerF.deployVault(token3, pricefeed3, "Hodl CNGN", "HCNGN", defaultConfig);
     }
 
     function generateSelectors(string memory _facetName) internal returns (bytes4[] memory selectors) {

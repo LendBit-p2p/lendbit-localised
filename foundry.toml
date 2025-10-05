@@ -3,6 +3,7 @@ src = 'contracts'
 out = 'out'
 libs = ['lib']
 ffi = true
+viaIR = true
 verbosity = 5
 remappings = [
     '@chainlink/contracts/=lib/chainlink-evm/contracts/',

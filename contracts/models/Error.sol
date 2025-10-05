@@ -18,6 +18,9 @@ error TRANSFER_FAILED();
 error INSUFFICIENT_ALLOWANCE();
 error INSUFFICIENT_BALANCE();
 error HEALTH_FACTOR_TOO_LOW(uint256 _healthFactor);
+error NOT_LIQUIDATABLE();
+error NO_ACTIVE_BORROW_FOR_TOKEN(uint256 positionId, address token);
+error NO_COLLATERAL_FOR_TOKEN(uint256 positionId, address token);
 
 error TOKEN_OVERUTILIZATION();
 error NOT_BORROW_OWNER();

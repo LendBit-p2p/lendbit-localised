@@ -30,6 +30,7 @@ library LibAppStorage {
 
         // collateral tracking
         mapping(uint256 => mapping(address => uint256)) s_positionCollateral; // PositionID -> (Token Address -> Amount)
+        mapping(uint256 => mapping(address => uint256)) s_positionLockedCollateral; // PositionID -> (Token Address -> Amount)
         mapping(uint256 => mapping(address => uint256)) s_borrowLockedCollateral; // BorrowID -> (Token Address -> Amount)
         mapping(address => bool) s_supportedCollateralTokens;
         address[] s_allCollateralTokens; // list of all collateral tokens
