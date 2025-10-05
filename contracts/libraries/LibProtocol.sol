@@ -29,6 +29,7 @@ library LibProtocol {
         if (_positionId == 0) {
             _positionId = s._createPositionFor(msg.sender);
         }
+        if (!LibAppStorage.appStorage().s_supportedCollateralTokens[_token]) revert TOKEN_NOT_SUPPORTED(_token);
         _allowanceAndBalanceCheck(_token, _amount);
 
         s.s_positionCollateral[_positionId][_token] += _amount;
@@ -43,12 +44,18 @@ library LibProtocol {
         if (s.s_positionCollateral[_positionId][_token] < _amount) revert INSUFFICIENT_BALANCE();
 
         s.s_positionCollateral[_positionId][_token] -= _amount;
+        uint256 _healthFactor = _getHealthFactor(s, _positionId, 0);
+
+        uint256 _borrowValue = _getPositionBorrowedValue(s, _positionId);
+        if (_borrowValue > 0) {
+            if (_healthFactor < Constants.MIN_HEALTH_FACTOR) revert HEALTH_FACTOR_TOO_LOW(_healthFactor);
+        }
+
         bool _success = ERC20(_token).transfer(msg.sender, _amount);
         if (!_success) revert TRANSFER_FAILED();
         emit CollateralWithdrawn(_positionId, _token, _amount);
     }
 
-    //TODO: remove data types not needed for lquidity pools
     function _borrow(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount)
         internal
         returns (uint256)
@@ -57,30 +64,10 @@ library LibProtocol {
         if (!s.s_supportedToken[_token]) revert TOKEN_NOT_SUPPORTED(_token);
         if (!s._validateVaultUtlization(_token, _amount)) revert TOKEN_OVERUTILIZATION();
 
-        s.s_nextBorrowId++;
-        uint256 _borrowId = s.s_nextBorrowId;
-
         (, uint256 _currentBorrowValue) = s._getTokenValueInUSD(_token, _amount);
         uint256 _healthFactor = _getHealthFactor(s, _positionId, _currentBorrowValue);
 
         if (_healthFactor < Constants.MIN_HEALTH_FACTOR) revert HEALTH_FACTOR_TOO_LOW(_healthFactor);
-
-        // Calculate the amount of collateral to lock based on the loan value
-        uint256 _collateralToLock = _calculateCollateralToLock(_currentBorrowValue);
-
-        // For each collateral token, lock an appropriate amount based on its USD value
-        _lockCollateral(s, _positionId, _borrowId, _collateralToLock);
-
-        // borrowing logic to be implemented
-        BorrowDetails memory borrowDetails = BorrowDetails({
-            positionId: _positionId,
-            token: _token,
-            amount: _amount,
-            totalRepayment: 0,
-            startTime: block.timestamp,
-            status: RequestStatus.FULFILLED
-        });
-        s.s_borrowDetails[_borrowId] = borrowDetails;
 
         uint256 _tokenBorrow = s.s_positionBorrowed[_positionId][_token];
         if (_tokenBorrow == 0) {
@@ -97,51 +84,34 @@ library LibProtocol {
         _vault.borrow(msg.sender, _amount);
 
         emit BorrowComplete(_positionId, _token, _amount);
-        return _borrowId;
+        return s.s_positionBorrowed[_positionId][_token];
     }
 
-    function _repay(LibAppStorage.StorageLayout storage s, uint256 _borrowId, uint256 _amount)
+    function _repay(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount)
         internal
         returns (uint256)
     {
-        if (_borrowId > s.s_nextBorrowId) revert INVALID_BORROW_ID(_borrowId);
         uint256 _positionId = _positionIdCheck(s);
 
-        BorrowDetails storage _borrowDetails = s.s_borrowDetails[_borrowId];
-        if (_positionId != _borrowDetails.positionId) revert NOT_BORROW_OWNER();
+        uint256 _debt = s.s_positionBorrowed[_positionId][_token];
+        if (_debt == 0) revert NO_OUTSTANDING_DEBT(_positionId, _token);
 
-        ERC20 _token = ERC20(_borrowDetails.token);
-        if (_token.allowance(msg.sender, address(this)) < _amount) revert INSUFFICIENT_ALLOWANCE();
-        if (_token.balanceOf(msg.sender) < _amount) revert INSUFFICIENT_BALANCE();
+        _allowanceAndBalanceCheck(_token, _amount);
 
-        uint256 _totalDebt = _calculateUserDebt(s, _positionId, address(_token), 0);
-
-        if (_amount >= _totalDebt) {
-            _amount = _totalDebt;
-            _borrowDetails.status = RequestStatus.REPAID;
+        if (_amount > _debt) {
+            _amount = _debt;
         }
 
-        s.s_positionBorrowed[_positionId][_borrowDetails.token] = _totalDebt - _amount;
-        s.s_positionBorrowedLastUpdate[_positionId][_borrowDetails.token] = block.timestamp;
-
-        _borrowDetails.totalRepayment += _amount;
-
-        (, uint256 _amountValue) = s._getTokenValueInUSD(_borrowDetails.token, _amount);
-
-        if (_amount == _totalDebt) {
-            // Unlock all collateral if the loan is fully repaid
-            _unlockCollateral(s, _positionId, _borrowId, _getBorrowIdLockedCollateralValue(s, _borrowId));
-            _borrowDetails.status = RequestStatus.REPAID;
-        } else {
-            _unlockCollateral(s, _positionId, _borrowId, _amountValue);
-        }
+        RepayStateChangeParams memory _params =
+            RepayStateChangeParams({positionId: _positionId, token: _token, amount: _amount});
+        _repayStateChanges(s, _params);
         s._updateVaultRepays(address(_token), _amount);
 
-        bool _success = _token.transferFrom(msg.sender, address(s.i_tokenVault[address(_token)]), _amount);
+        bool _success = ERC20(_token).transferFrom(msg.sender, address(s.i_tokenVault[_token]), _amount);
         if (!_success) revert TRANSFER_FAILED();
 
-        emit Repay(_positionId, address(_token), _amount);
-        return _calculateUserDebt(s, _positionId, address(_token), 0);
+        emit Repay(_positionId, _token, _amount);
+        return _calculateUserDebt(s, _positionId, _token, 0);
     }
 
     function _repayStateChanges(LibAppStorage.StorageLayout storage s, RepayStateChangeParams memory _params)
@@ -156,7 +126,6 @@ library LibProtocol {
     function _allowanceAndBalanceCheck(address _token, uint256 _amount) internal view {
         if (_token == address(0)) revert ADDRESS_ZERO();
         if (_amount == 0) revert AMOUNT_ZERO();
-        if (!LibAppStorage.appStorage().s_supportedCollateralTokens[_token]) revert TOKEN_NOT_SUPPORTED(_token);
         if (ERC20(_token).allowance(msg.sender, address(this)) < _amount) revert INSUFFICIENT_ALLOWANCE();
         if (ERC20(_token).balanceOf(msg.sender) < _amount) revert INSUFFICIENT_BALANCE();
     }
@@ -217,85 +186,6 @@ library LibProtocol {
         emit LocalCurrencyRemoved(_currency);
     }
 
-    function _lockCollateral(
-        LibAppStorage.StorageLayout storage s,
-        uint256 _positionId,
-        uint256 _borrowId,
-        uint256 _collateralToLock
-    ) internal {
-        for (uint256 i = 0; i < s.s_allCollateralTokens.length; i++) {
-            address _token = s.s_allCollateralTokens[i];
-            uint256 _userLockedCollateral = s.s_positionCollateral[_positionId][_token];
-
-            // Get price per token (not total USD value)
-            (uint256 _pricePerToken, uint256 _userLockedCollateralUSD) =
-                s._getTokenValueInUSD(_token, _userLockedCollateral);
-            uint8 _pricefeedDecimals = s._getPriceDecimals(_token);
-
-            uint256 _amountToUnlockUSD;
-            if (_userLockedCollateralUSD >= _collateralToLock) {
-                _amountToUnlockUSD = _collateralToLock;
-                _collateralToLock = 0;
-            } else {
-                _amountToUnlockUSD = _userLockedCollateralUSD;
-                _collateralToLock -= _userLockedCollateralUSD;
-            }
-
-            // Convert USD amount to token amount
-            uint256 _amountToLock =
-                LibUtils._convertUSDToTokenAmount(_token, _amountToUnlockUSD, _pricePerToken, _pricefeedDecimals);
-
-            // Store the locked amount for each collateral token
-            s.s_borrowLockedCollateral[_borrowId][_token] += _amountToLock;
-            s.s_positionLockedCollateral[_positionId][_token] += _amountToLock;
-            s.s_positionCollateral[_positionId][_token] = _userLockedCollateral - _amountToLock;
-
-            if (_collateralToLock == 0) break;
-        }
-    }
-
-    function _unlockCollateral(
-        LibAppStorage.StorageLayout storage s,
-        uint256 _positionId,
-        uint256 _borrowId,
-        uint256 _collateralToUnlock
-    ) internal {
-        // uint256 _collateralToLockUSD = _collateralToUnlock;
-        for (uint256 i = 0; i < s.s_allCollateralTokens.length; i++) {
-            address _token = s.s_allCollateralTokens[i];
-            uint256 _userLockedCollateral = s.s_borrowLockedCollateral[_borrowId][_token];
-
-            if (_userLockedCollateral == 0) continue;
-
-            uint8 _decimalToken = LibUtils._getTokenDecimals(_token);
-
-            // Get price per token (not total USD value)
-            (uint256 _pricePerToken, uint256 _userLockedCollateralUSD) =
-                s._getTokenValueInUSD(_token, _userLockedCollateral);
-            uint8 _pricefeedDecimals = s._getPriceDecimals(_token);
-
-            uint256 _amountToUnlockUSD;
-            if (_collateralToUnlock <= _userLockedCollateralUSD) {
-                _amountToUnlockUSD = _userLockedCollateralUSD;
-                _collateralToUnlock = 0;
-            } else {
-                _amountToUnlockUSD = _userLockedCollateralUSD;
-                _collateralToUnlock -= _userLockedCollateralUSD;
-            }
-
-            // Convert USD amount to token amount
-            uint256 _amountToUnlock = _amountToUnlockUSD * (10 ** _decimalToken)
-                / LibUtils._noramlizeToNDecimals(_pricePerToken, _pricefeedDecimals, Constants.PRECISION_SCALE);
-
-            // Store the locked amount for each collateral token
-            s.s_borrowLockedCollateral[_borrowId][_token] -= _amountToUnlock;
-            s.s_positionLockedCollateral[_positionId][_token] -= _amountToUnlock;
-            s.s_positionCollateral[_positionId][_token] = _userLockedCollateral + _amountToUnlock;
-
-            if (_collateralToUnlock == 0) break;
-        }
-    }
-
     function _getPositionCollateralValue(LibAppStorage.StorageLayout storage s, uint256 _positionId)
         internal
         view
@@ -306,7 +196,6 @@ library LibProtocol {
         for (uint256 i = 0; i < _tokens.length; i++) {
             address _token = _tokens[i];
             uint256 _amount = s.s_positionCollateral[_positionId][_token];
-            _amount += s.s_positionLockedCollateral[_positionId][_token];
             (, uint256 _usdValue) = s._getTokenValueInUSD(_token, _amount);
             _totalValue += _usdValue;
         }
@@ -323,38 +212,6 @@ library LibProtocol {
         return _usdValue;
     }
 
-    function _getPositionLockedCollateralValue(LibAppStorage.StorageLayout storage s, uint256 _positionId)
-        internal
-        view
-        returns (uint256)
-    {
-        uint256 _totalValue = 0;
-        address[] memory _tokens = s.s_allCollateralTokens;
-        for (uint256 i = 0; i < _tokens.length; i++) {
-            address _token = _tokens[i];
-            uint256 _amount = s.s_positionLockedCollateral[_positionId][_token];
-            (, uint256 _usdValue) = s._getTokenValueInUSD(_token, _amount);
-            _totalValue += _usdValue;
-        }
-        return _totalValue;
-    }
-
-    function _getBorrowIdLockedCollateralValue(LibAppStorage.StorageLayout storage s, uint256 _borrowId)
-        internal
-        view
-        returns (uint256)
-    {
-        uint256 _totalValue = 0;
-        address[] memory _tokens = s.s_allCollateralTokens;
-        for (uint256 i = 0; i < _tokens.length; i++) {
-            address _token = _tokens[i];
-            uint256 _amount = s.s_borrowLockedCollateral[_borrowId][_token];
-            (, uint256 _usdValue) = s._getTokenValueInUSD(_token, _amount);
-            _totalValue += _usdValue;
-        }
-        return _totalValue;
-    }
-
     function _getPositionBorrowedValue(LibAppStorage.StorageLayout storage s, uint256 _positionId)
         internal
         view
@@ -364,7 +221,7 @@ library LibProtocol {
         address[] memory _tokens = s.s_allSupportedTokens;
         for (uint256 i = 0; i < _tokens.length; i++) {
             address _token = _tokens[i];
-            uint256 _amount = s.s_positionBorrowed[_positionId][_token];
+            uint256 _amount = _calculateUserDebt(s, _positionId, _token, 0);
             (, uint256 _usdValue) = s._getTokenValueInUSD(_token, _amount);
             _totalValue += _usdValue;
         }
@@ -386,10 +243,6 @@ library LibProtocol {
         if (_borrowedValue == 0) return (_collateralAdjustedValue * Constants.PRECISION); // No debt means max health factor
 
         return _collateralAdjustedValue * Constants.PRECISION / _borrowedValue; // Health factor with 18 decimals
-    }
-
-    function _calculateCollateralToLock(uint256 _loanUSDValue) internal pure returns (uint256) {
-        return _loanUSDValue * Constants.BASIS_POINTS_SCALE / Constants.COLLATERALIZATION_RATIO; // 125% of the amount being borrowed
     }
 
     /**

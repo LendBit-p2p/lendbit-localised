@@ -23,8 +23,7 @@ error NO_ACTIVE_BORROW_FOR_TOKEN(uint256 positionId, address token);
 error NO_COLLATERAL_FOR_TOKEN(uint256 positionId, address token);
 
 error TOKEN_OVERUTILIZATION();
-error NOT_BORROW_OWNER();
-error INVALID_BORROW_ID(uint256 borrowId);
+error NO_OUTSTANDING_DEBT(uint256 positionId, address token);
 
 error EMPTY_STRING();
 error CURRENCY_ALREADY_SUPPORTED(string _currency);

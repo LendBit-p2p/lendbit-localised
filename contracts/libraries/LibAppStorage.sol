@@ -13,11 +13,9 @@ library LibAppStorage {
         IFunctionsRouter i_router;
         LinkTokenInterface i_linkToken;
         uint256 s_nextPositionId;
-        uint256 s_nextBorrowId;
         mapping(uint256 => address) s_positionOwner; // PositionID -> Owner Address
         mapping(address => uint256) s_ownerPosition; // Owner Address -> PositionID
         mapping(bytes32 => uint256) s_requestIdToBorrowId; // Chainlink RequestID -> BorrowID
-        mapping(uint256 => BorrowDetails) s_borrowDetails; // BorrowID -> BorrowDetails
 
         // borrowable token related storage
         address[] s_allSupportedTokens;
@@ -30,15 +28,12 @@ library LibAppStorage {
 
         // collateral tracking
         mapping(uint256 => mapping(address => uint256)) s_positionCollateral; // PositionID -> (Token Address -> Amount)
-        mapping(uint256 => mapping(address => uint256)) s_positionLockedCollateral; // PositionID -> (Token Address -> Amount)
-        mapping(uint256 => mapping(address => uint256)) s_borrowLockedCollateral; // BorrowID -> (Token Address -> Amount)
         mapping(address => bool) s_supportedCollateralTokens;
         address[] s_allCollateralTokens; // list of all collateral tokens
 
         // borrow tracking
         mapping(uint256 => mapping(address => uint256)) s_positionBorrowed; // PositionID -> (token address -> Amount)
         mapping(uint256 => mapping(address => uint256)) s_positionBorrowedLastUpdate; // PositionID -> (token address -> timestamp)
-    
 
         // Chainlink functions variables
         uint32 s_gasLimit;

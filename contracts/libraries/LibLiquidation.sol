@@ -39,8 +39,7 @@ library LibLiquidation {
         if (_collateralAmount == 0) revert NO_COLLATERAL_FOR_TOKEN(_positionId, _collateralToken);
 
         ERC20 _tokenI = ERC20(_token);
-        if (_tokenI.allowance(msg.sender, address(this)) < _amount) revert INSUFFICIENT_ALLOWANCE();
-        if (_tokenI.balanceOf(msg.sender) < _amount) revert INSUFFICIENT_BALANCE();
+        LibProtocol._allowanceAndBalanceCheck(_token, _amount);
 
         (uint256 _collateralPricePerToken, uint256 _collateralValue) =
             s._getTokenValueInUSD(_collateralToken, _collateralAmount);

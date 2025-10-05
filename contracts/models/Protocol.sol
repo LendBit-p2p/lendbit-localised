@@ -34,15 +34,6 @@ enum RequestStatus {
     LIQUIDATED
 }
 
-struct BorrowDetails {
-    uint256 positionId;
-    address token;
-    uint256 amount;
-    uint256 totalRepayment;
-    uint256 startTime; // timestamp
-    RequestStatus status;
-}
-
 struct FunctionResponse {
     bool exists;
     bytes32 requestId;

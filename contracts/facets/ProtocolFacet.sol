@@ -6,7 +6,6 @@ import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {LibProtocol} from "../libraries/LibProtocol.sol";
 
 import "../models/Error.sol";
-import {BorrowDetails} from "../models/Protocol.sol";
 
 contract ProtocolFacet {
     using LibProtocol for LibAppStorage.StorageLayout;
@@ -31,14 +30,14 @@ contract ProtocolFacet {
         s._withdrawCollateral(_token, _amount);
     }
 
-     function borrow(address _token, uint256 _amount) external returns (uint256) {
+    function borrow(address _token, uint256 _amount) external returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._borrow(_token, _amount);
     }
 
-    function repay(uint256 _borrowId, uint256 _amount) external returns (uint256) {
+    function repay(address _token, uint256 _amount) external returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        return s._repay(_borrowId, _amount);
+        return s._repay(_token, _amount);
     }
 
     // function borrowCurrency(string calldata _currency, uint256 _amount) external {
@@ -117,11 +116,6 @@ contract ProtocolFacet {
         return s._getPositionCollateralValue(_positionId);
     }
 
-    function getPositionLockedCollateralValue(uint256 _positionId) external view returns (uint256) {
-        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        return s._getPositionLockedCollateralValue(_positionId);
-    }
-
     function getPositionBorrowedValue(uint256 _positionId) external view returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._getPositionBorrowedValue(_positionId);
@@ -132,9 +126,9 @@ contract ProtocolFacet {
         return s._getHealthFactor(_positionId, _currentBorrowValue);
     }
 
-    function getBorrowDetails(uint256 _borrowId) external view returns (BorrowDetails memory) {
+    function getBorrowDetails(uint256 _positionId, address _token) external view returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        return s.s_borrowDetails[_borrowId];
+        return s._calculateUserDebt(_positionId, _token, 0);
     }
 
     // Modifiers
