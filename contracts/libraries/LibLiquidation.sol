@@ -23,8 +23,6 @@ library LibLiquidation {
         return _healthFactor < 1e18;
     }
 
-    event Amount(uint256 a1, uint256 a2);
-
     function _liquidatePosition(
         LibAppStorage.StorageLayout storage s,
         uint256 _positionId,
@@ -75,8 +73,9 @@ library LibLiquidation {
         bool _success = _tokenI.transferFrom(msg.sender, address(s.i_tokenVault[_token]), _amount);
         if (!_success) revert TRANSFER_FAILED();
 
-        _success = ERC20(_collateralToken).transfer(msg.sender, _amountToLiquidate);
-        if (!_success) revert TRANSFER_FAILED();
+        LibProtocol._transferToken(_collateralToken, msg.sender, _amountToLiquidate);
+        // _success = ERC20(_collateralToken).transfer(msg.sender, _amountToLiquidate);
+        // if (!_success) revert TRANSFER_FAILED();
 
         emit PositionLiquidated(_positionId, msg.sender, _collateralToken, _amountToLiquidate);
         emit Repay(_positionId, _token, _amount);

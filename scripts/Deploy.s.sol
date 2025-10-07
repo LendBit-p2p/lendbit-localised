@@ -46,6 +46,7 @@ contract Deployment is Script, IDiamondCut {
         slopeRate: 1500,
         reserveFactor: 2000,
         optimalUtilization: 7500,
+        liquidationBonus: 1000,
         lastUpdated: block.timestamp
     });
 

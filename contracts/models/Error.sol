@@ -14,6 +14,7 @@ error TOKEN_ALREADY_SUPPORTED_AS_COLLATERAL(address _asset);
 error TOKEN_NOT_SUPPORTED_AS_COLLATERAL(address _asset);
 
 error AMOUNT_ZERO();
+error AMOUNT_MISMATCH(uint256 _amount1, uint256 _amount2);
 error TRANSFER_FAILED();
 error INSUFFICIENT_ALLOWANCE();
 error INSUFFICIENT_BALANCE();

@@ -15,7 +15,7 @@ contract ProtocolFacet {
      * @param _token The collateral token address
      * @param _amount The amount to deposit
      */
-    function depositCollateral(address _token, uint256 _amount) external {
+    function depositCollateral(address _token, uint256 _amount) external payable {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         s._depositCollateral(_token, _amount);
     }

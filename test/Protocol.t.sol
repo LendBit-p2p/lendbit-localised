@@ -147,6 +147,46 @@ contract ProtocolTest is Base {
         assertEq(positionManagerF.getPositionIdForUser(user1), 1);
     }
 
+        function testDepositNativeTokenCollateral() public {
+        uint256 depositAmount = 1000 * 1e18;
+        vm.deal(user1, depositAmount);
+
+        vm.startPrank(user1);
+
+        // Expect events
+        vm.expectEmit(true, true, false, false);
+        emit PositionIdCreated(1, user1);
+
+        vm.expectEmit(true, true, true, false);
+        emit CollateralDeposited(1, address(1), depositAmount);
+
+        // Deposit collateral
+        protocolF.depositCollateral{value: depositAmount}(address(1), depositAmount);
+        vm.stopPrank();
+
+        // Verify collateral was deposited
+        uint256 collateralBalance = protocolF.getPositionCollateral(1, address(1));
+        assertEq(collateralBalance, depositAmount);
+
+        // Verify token was transferred
+        assertEq(user1.balance, 0);
+        assertEq(address(diamond).balance, depositAmount);
+
+        // Verify position was created
+        assertEq(positionManagerF.getPositionIdForUser(user1), 1);
+    }
+
+    function testDepositNativeTokenCollateralRevertWithDifferentMsgValueFromAmount() public {
+        uint256 depositAmount = 1000 * 1e18;
+        vm.deal(user1, depositAmount);
+
+        vm.startPrank(user1);
+
+        vm.expectRevert(abi.encodeWithSelector(AMOUNT_MISMATCH.selector, 1 ether, depositAmount));
+        protocolF.depositCollateral{value: 1 ether}(address(1), depositAmount);
+        vm.stopPrank();
+    }
+
     function testDepositCollateralToExistingPosition() public {
         uint256 depositAmount1 = 1000 * 1e18;
         uint256 depositAmount2 = 500 * 1e18;
@@ -260,6 +300,32 @@ contract ProtocolTest is Base {
         assertEq(token1.balanceOf(address(diamond)), remainingCollateral);
     }
 
+        function testWithdrawNativeTokenCollateral() public {
+        uint256 depositAmount = 1000 * 1e18;
+        uint256 withdrawAmount = 300 * 1e18;
+
+        // First deposit some collateral
+        vm.deal(user1, depositAmount);
+        vm.startPrank(user1);
+        protocolF.depositCollateral{value: depositAmount}(address(1), depositAmount);
+
+        uint256 positionId = positionManagerF.getPositionIdForUser(user1);
+
+        // Withdraw some collateral
+        vm.expectEmit(true, true, true, false);
+        emit CollateralWithdrawn(positionId, address(1), withdrawAmount);
+
+        protocolF.withdrawCollateral(address(1), withdrawAmount);
+        vm.stopPrank();
+
+        // Verify collateral was withdrawn
+        uint256 remainingCollateral = depositAmount - withdrawAmount;
+        assertEq(protocolF.getPositionCollateral(positionId, address(1)), remainingCollateral);
+        assertEq(user1.balance, withdrawAmount);
+        assertEq(address(diamond).balance, remainingCollateral);
+    }
+
+
     function testWithdrawAllCollateral() public {
         uint256 depositAmount = 1000 * 1e18;
 
@@ -354,6 +420,7 @@ contract ProtocolTest is Base {
         uint256 initialBalance = protocolF.getPositionCollateral(positionId, address(token1));
         uint256 initialUserBalance = token1.balanceOf(user1);
 
+        vm.expectRevert(abi.encodeWithSelector(AMOUNT_ZERO.selector));
         protocolF.withdrawCollateral(address(token1), 0);
 
         // Balances should remain unchanged
@@ -905,7 +972,7 @@ contract ProtocolTest is Base {
     function testGetAllCollateralTokens() public view {
         address[] memory tokens = protocolF.getAllCollateralTokens();
 
-        assertEq(tokens.length, 2);
+        assertEq(tokens.length, 3);
         assertTrue(tokens[0] == address(token1) || tokens[1] == address(token1));
         assertTrue(tokens[0] == address(token2) || tokens[1] == address(token2));
     }
@@ -915,13 +982,13 @@ contract ProtocolTest is Base {
         protocolF.addCollateralToken(address(token3), pricefeed3);
 
         address[] memory tokens = protocolF.getAllCollateralTokens();
-        assertEq(tokens.length, 3);
+        assertEq(tokens.length, 4);
 
         // Remove a token
         protocolF.removeCollateralToken(address(token1));
 
         tokens = protocolF.getAllCollateralTokens();
-        assertEq(tokens.length, 2);
+        assertEq(tokens.length, 3);
 
         // Verify token1 is not in the array
         for (uint256 i = 0; i < tokens.length; i++) {
