@@ -161,6 +161,7 @@ contract Base is Test, IDiamondCut {
     function _setupInitialCollateralTokens() internal {
         protocolF.addCollateralToken(address(token1), pricefeed1);
         protocolF.addCollateralToken(address(token2), pricefeed2);
+        protocolF.addCollateralToken(address(1), pricefeed1); // Native token
     }
 
     function deployERC20ContractAndAddPriceFeed(string memory _name, uint8 _decimals, int256 _initialAnswer)
@@ -178,10 +179,18 @@ contract Base is Test, IDiamondCut {
         internal
         returns (uint256 positionId)
     {
-        token1.mint(_user, _amount);
+        if (_token == address(1)) {
+            vm.deal(_user, _amount);
+        } else {
+            token1.mint(_user, _amount);
+        }
         vm.startPrank(_user);
-        ERC20Mock(_token).approve(address(diamond), _amount);
-        protocolF.depositCollateral(_token, _amount);
+        if (_token == address(1)) {
+            protocolF.depositCollateral{value: _amount}(_token, _amount);
+        } else {
+            ERC20Mock(_token).approve(address(diamond), _amount);
+            protocolF.depositCollateral(_token, _amount);
+        }
         vm.stopPrank();
         positionId = positionManagerF.getPositionIdForUser(_user);
     }

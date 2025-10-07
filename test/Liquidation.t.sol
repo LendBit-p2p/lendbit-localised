@@ -61,6 +61,39 @@ contract LiquidationTest is Base {
         vm.assertGt(_userCollateralBefore, protocolF.getPositionCollateral(_positionId, address(token1)));
     }
 
+
+    function testLiquidatePositionWithNativeTokenCollateral_Success() public {
+        createVaultAndFund(100e6);
+        uint256 _positionId = depositCollateralFor(user1, address(1), 4 ether);
+
+        uint256 _borrowAmount = 10e6;
+        vm.startPrank(user1);
+        protocolF.borrow(address(token4), _borrowAmount);
+        vm.stopPrank();
+
+        // Make position liquidatable
+        MockV3Aggregator(pricefeed4).updateAnswer(1000e8);
+
+        uint256 _userCollateralBefore = protocolF.getPositionCollateral(_positionId, address(1));
+        uint256 _t1BalanceBefore = liquidator.balance;
+
+        vm.startPrank(liquidator);
+        // Give liquidator enough allowance and balance
+        token4.mint(liquidator, _borrowAmount);
+        token4.approve(address(liquidationF), _borrowAmount);
+
+        vm.expectEmit(true, true, true, false);
+        emit PositionLiquidated(_positionId, liquidator, address(1), 0);
+        vm.expectEmit(true, true, false, false);
+        emit Repay(_positionId, address(token4), 0);
+        liquidationF.liquidatePosition(_positionId, _borrowAmount, address(token4), address(1));
+        vm.stopPrank();
+
+        vm.assertGt(_borrowAmount, token4.balanceOf(liquidator));
+        vm.assertLt(_t1BalanceBefore, liquidator.balance);
+        vm.assertGt(_userCollateralBefore, protocolF.getPositionCollateral(_positionId, address(1)));
+    }
+
     function testLiquidatePosition_RevertNotLiquidatable() public {
         createVaultAndFund(100e6);
         uint256 _positionId = depositCollateralFor(user1, address(token1), 4 ether);

@@ -24,21 +24,24 @@ library LibProtocol {
     using LibVaultManager for LibAppStorage.StorageLayout;
 
     function _depositCollateral(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount) internal {
+        _validateAmount(_token, _amount);
         uint256 _positionId = s._getPositionIdForUser(msg.sender);
 
         if (_positionId == 0) {
             _positionId = s._createPositionFor(msg.sender);
         }
-        if (!LibAppStorage.appStorage().s_supportedCollateralTokens[_token]) revert TOKEN_NOT_SUPPORTED(_token);
+        if (!s.s_supportedCollateralTokens[_token]) revert TOKEN_NOT_SUPPORTED(_token);
         _allowanceAndBalanceCheck(_token, _amount);
 
         s.s_positionCollateral[_positionId][_token] += _amount;
-        bool _success = ERC20(_token).transferFrom(msg.sender, address(this), _amount);
-        if (!_success) revert TRANSFER_FAILED();
+        
+        if (_token != Constants.NATIVE_TOKEN) {
+            bool _success = ERC20(_token).transferFrom(msg.sender, address(this), _amount);
+            if (!_success) revert TRANSFER_FAILED();
+        }
         emit CollateralDeposited(_positionId, _token, _amount);
     }
 
-    // TODO: fix withdraw to check health factor before allowing withdraw
     function _withdrawCollateral(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount) internal {
         uint256 _positionId = _positionIdCheck(s);
         if (s.s_positionCollateral[_positionId][_token] < _amount) revert INSUFFICIENT_BALANCE();
@@ -51,8 +54,7 @@ library LibProtocol {
             if (_healthFactor < Constants.MIN_HEALTH_FACTOR) revert HEALTH_FACTOR_TOO_LOW(_healthFactor);
         }
 
-        bool _success = ERC20(_token).transfer(msg.sender, _amount);
-        if (!_success) revert TRANSFER_FAILED();
+        _transferToken(_token, msg.sender, _amount);
         emit CollateralWithdrawn(_positionId, _token, _amount);
     }
 
@@ -126,8 +128,10 @@ library LibProtocol {
     function _allowanceAndBalanceCheck(address _token, uint256 _amount) internal view {
         if (_token == address(0)) revert ADDRESS_ZERO();
         if (_amount == 0) revert AMOUNT_ZERO();
-        if (ERC20(_token).allowance(msg.sender, address(this)) < _amount) revert INSUFFICIENT_ALLOWANCE();
-        if (ERC20(_token).balanceOf(msg.sender) < _amount) revert INSUFFICIENT_BALANCE();
+        if (_token != Constants.NATIVE_TOKEN) {
+            if (ERC20(_token).allowance(msg.sender, address(this)) < _amount) revert INSUFFICIENT_ALLOWANCE();
+            if (ERC20(_token).balanceOf(msg.sender) < _amount) revert INSUFFICIENT_BALANCE();
+        }
     }
 
     function _positionIdCheck(LibAppStorage.StorageLayout storage s) internal view returns (uint256) {
@@ -270,5 +274,26 @@ library LibProtocol {
         debt = _amount + _tokenBorrows + ((_tokenBorrows * factor) / 1e18);
 
         return debt;
+    }
+
+    function _transferToken(address _token, address _to, uint256 _amount) internal {
+        if (_to == address(0)) revert ADDRESS_ZERO();
+        if (_amount == 0) revert AMOUNT_ZERO();
+
+        if (_token == Constants.NATIVE_TOKEN) {
+            (bool sent, ) = _to.call{value: _amount}("");
+            if (!sent) revert TRANSFER_FAILED();
+            return;
+        } else {
+            bool _success = ERC20(_token).transfer(_to, _amount);
+            if (!_success) revert TRANSFER_FAILED();
+        }
+    }
+
+    function _validateAmount(address _token, uint256 _amount) internal view {
+        if (_amount == 0) revert AMOUNT_ZERO();
+        if (_token == Constants.NATIVE_TOKEN) {
+            if (msg.value != _amount) revert AMOUNT_MISMATCH(msg.value, _amount);
+        }
     }
 }

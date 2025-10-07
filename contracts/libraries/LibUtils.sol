@@ -34,6 +34,7 @@ library LibUtils {
     }
 
     function _getTokenDecimals(address _token) internal view returns (uint8) {
+        if (_token == Constants.NATIVE_TOKEN) return 18;
         return ERC20(_token).decimals();
     }
 }
