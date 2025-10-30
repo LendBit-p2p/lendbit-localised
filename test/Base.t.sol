@@ -46,6 +46,8 @@ contract Base is Test, IDiamondCut {
     address user2 = mkaddr("user2");
     address nonAdmin = mkaddr("nonAdmin");
 
+    uint16 baseTokenLTV = 8000;
+
     VaultConfiguration defaultConfig = VaultConfiguration({
         totalDeposits: 0,
         totalBorrows: 0,
@@ -159,9 +161,9 @@ contract Base is Test, IDiamondCut {
     }
 
     function _setupInitialCollateralTokens() internal {
-        protocolF.addCollateralToken(address(token1), pricefeed1);
-        protocolF.addCollateralToken(address(token2), pricefeed2);
-        protocolF.addCollateralToken(address(1), pricefeed1); // Native token
+        protocolF.addCollateralToken(address(token1), pricefeed1, baseTokenLTV);
+        protocolF.addCollateralToken(address(token2), pricefeed2, baseTokenLTV);
+        protocolF.addCollateralToken(address(1), pricefeed1, baseTokenLTV); // Native token
     }
 
     function deployERC20ContractAndAddPriceFeed(string memory _name, uint8 _decimals, int256 _initialAnswer)

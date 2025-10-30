@@ -140,16 +140,19 @@ library LibProtocol {
         return _positionId;
     }
 
-    function _addCollateralToken(LibAppStorage.StorageLayout storage s, address _token, address _pricefeed) internal {
+    function _addCollateralToken(LibAppStorage.StorageLayout storage s, address _token, address _pricefeed, uint16 _tokenLTV) internal {
         if (_token == address(0)) revert ADDRESS_ZERO();
         if (_pricefeed == address(0)) revert ADDRESS_ZERO();
+        if (_tokenLTV < 1000) revert LTV_BELOW_TEN_PERCENT();
         if (s.s_supportedCollateralTokens[_token]) revert TOKEN_ALREADY_SUPPORTED_AS_COLLATERAL(_token);
 
         s.s_supportedCollateralTokens[_token] = true;
         s.s_allCollateralTokens.push(_token);
         s.s_tokenPriceFeed[_token] = _pricefeed;
+        s.s_collateralTokenLTV[_token] = _tokenLTV;
 
         emit CollateralTokenAdded(_token);
+        emit CollateralTokenLTVUpdated(_token, 0, _tokenLTV);
     }
 
     function _removeCollateralToken(LibAppStorage.StorageLayout storage s, address _token) internal {
@@ -170,6 +173,17 @@ library LibProtocol {
         }
 
         emit CollateralTokenRemoved(_token);
+    }
+
+    function _setCollateralTokenLtv(LibAppStorage.StorageLayout storage s, address _token, uint16 _tokenNewLTV) internal {
+        if (_token == address(0)) revert ADDRESS_ZERO();
+        if (_tokenNewLTV < 1000) revert LTV_BELOW_TEN_PERCENT();
+        if (!s.s_supportedCollateralTokens[_token]) revert TOKEN_NOT_SUPPORTED_AS_COLLATERAL(_token);
+
+        uint16 _oldLTV = s.s_collateralTokenLTV[_token];
+        s.s_collateralTokenLTV[_token] = _tokenNewLTV;
+
+        emit CollateralTokenLTVUpdated(_token, _oldLTV, _tokenNewLTV);
     }
 
     function _addLocalCurrencySupport(LibAppStorage.StorageLayout storage s, string calldata _currency) internal {

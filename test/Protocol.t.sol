@@ -9,7 +9,6 @@ import "../contracts/facets/PriceOracleFacet.sol";
 import "../contracts/facets/ProtocolFacet.sol";
 import "../contracts/facets/PositionManagerFacet.sol";
 import "../contracts/facets/VaultManagerFacet.sol";
-import "forge-std/Test.sol";
 import "../contracts/Diamond.sol";
 
 import "../contracts/models/Error.sol";
@@ -31,8 +30,9 @@ contract ProtocolTest is Base {
 
         vm.expectEmit(true, false, false, false);
         emit CollateralTokenAdded(newToken);
-
-        protocolF.addCollateralToken(newToken, pricefeed1);
+        vm.expectEmit(true, true, true, false);
+        emit CollateralTokenLTVUpdated(newToken, 0, baseTokenLTV);
+        protocolF.addCollateralToken(newToken, pricefeed1, baseTokenLTV);
 
         assertTrue(protocolF.isCollateralTokenSupported(newToken));
 
@@ -43,6 +43,7 @@ contract ProtocolTest is Base {
                 found = true;
                 break;
             }
+            assertEq(protocolF.getCollateralTokenLTV(allTokens[i]), baseTokenLTV);
         }
         assertTrue(found, "Token should be in collateral tokens array");
     }
@@ -52,18 +53,25 @@ contract ProtocolTest is Base {
 
         vm.startPrank(nonAdmin);
         vm.expectRevert(abi.encodeWithSelector(ONLY_SECURITY_COUNCIL.selector));
-        protocolF.addCollateralToken(newToken, pricefeed1);
+        protocolF.addCollateralToken(newToken, pricefeed1, baseTokenLTV);
         vm.stopPrank();
     }
 
     function testAddCollateralTokenFailsForAddressZero() public {
         vm.expectRevert(abi.encodeWithSelector(ADDRESS_ZERO.selector));
-        protocolF.addCollateralToken(address(0), address(0));
+        protocolF.addCollateralToken(address(0), address(0), baseTokenLTV);
+    }
+
+    function testAddCollateralTokenFailsForLTVBelow10Percent() public {
+        address newToken = address(0x123);
+
+        vm.expectRevert("LTV_BELOW_TEN_PERCENT()");
+        protocolF.addCollateralToken(newToken, pricefeed1, 999);
     }
 
     function testAddCollateralTokenFailsIfAlreadySupported() public {
         vm.expectRevert(abi.encodeWithSelector(TOKEN_ALREADY_SUPPORTED_AS_COLLATERAL.selector, address(token1)));
-        protocolF.addCollateralToken(address(token1), pricefeed1);
+        protocolF.addCollateralToken(address(token1), pricefeed1, baseTokenLTV);
     }
 
     // =============================================================
@@ -263,6 +271,46 @@ contract ProtocolTest is Base {
         vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_BALANCE.selector));
         protocolF.depositCollateral(address(token1), depositAmount);
         vm.stopPrank();
+    }
+
+    function testSetCollateralTokenLTV() public {
+        uint16 _newLTV = 5000; // 50%
+
+        vm.expectEmit(true, true, true, false);
+        emit CollateralTokenLTVUpdated(address(token1), baseTokenLTV, _newLTV);
+        protocolF.setCollateralTokenLtv(address(token1), _newLTV);
+
+        assertEq(_newLTV, protocolF.getCollateralTokenLTV(address(token1)));
+    }
+
+    function testSetCollateralTokenLTVFailsIfNotSecurityCouncil() public {
+        uint16 _newLTV = 5000; // 50%
+
+        vm.startPrank(user1);
+        vm.expectRevert("ONLY_SECURITY_COUNCIL()");
+        protocolF.setCollateralTokenLtv(address(token1), _newLTV);
+    }
+
+    function testSetCollateralTokenLTVFailsIfLTVBelow10Percent() public {
+        uint16 _newLTV = 900; // 9%
+
+        vm.expectRevert("LTV_BELOW_TEN_PERCENT()");
+        protocolF.setCollateralTokenLtv(address(token1), _newLTV);
+    }
+
+    function testSetCollateralTokenLTVFailsForAddressZero() public {
+        uint16 _newLTV = 1000; // 10%
+
+        vm.expectRevert("ADDRESS_ZERO()");
+        protocolF.setCollateralTokenLtv(address(0), _newLTV);
+    }
+
+    function testSetCollateralTokenLTVFailsIfTokenIsNotSupportedCollateral() public {
+        uint16 _newLTV = 5000; // 50%
+        address _unsupportedCollateral = address(0x123);
+
+        vm.expectRevert(abi.encodeWithSelector(TOKEN_NOT_SUPPORTED_AS_COLLATERAL.selector, _unsupportedCollateral));
+        protocolF.setCollateralTokenLtv(_unsupportedCollateral, _newLTV);
     }
 
     // =============================================================
@@ -979,7 +1027,7 @@ contract ProtocolTest is Base {
 
     function testGetAllCollateralTokensAfterAddingAndRemoving() public {
         // Add a new token
-        protocolF.addCollateralToken(address(token3), pricefeed3);
+        protocolF.addCollateralToken(address(token3), pricefeed3, baseTokenLTV);
 
         address[] memory tokens = protocolF.getAllCollateralTokens();
         assertEq(tokens.length, 4);
@@ -1052,7 +1100,7 @@ contract ProtocolTest is Base {
     }
 
     function testGetPositionCollateralValue() public {
-        protocolF.addCollateralToken(address(token3), pricefeed3);
+        protocolF.addCollateralToken(address(token3), pricefeed3, baseTokenLTV);
         uint256 depositAmount1 = 2 * 1e18; // 2 tokens of token1 (18 decimals)
         uint256 depositAmount2 = 10 * 1e18; // 10 tokens of token2 (18 decimals)
         uint256 depositAmount3 = 1000 * 1e6; // 1000 tokens of token3 (6 decimals)

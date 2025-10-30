@@ -49,9 +49,9 @@ contract ProtocolFacet {
      * @notice Add a token as accepted collateral (only security council)
      * @param _token The token address to add as collateral
      */
-    function addCollateralToken(address _token, address _pricefeed) external onlySecurityCouncil {
+    function addCollateralToken(address _token, address _pricefeed, uint16 _tokenLTV) external onlySecurityCouncil {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        s._addCollateralToken(_token, _pricefeed);
+        s._addCollateralToken(_token, _pricefeed, _tokenLTV);
     }
 
     /**
@@ -61,6 +61,11 @@ contract ProtocolFacet {
     function removeCollateralToken(address _token) external onlySecurityCouncil {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         s._removeCollateralToken(_token);
+    }
+
+    function setCollateralTokenLtv(address _token, uint16 _tokenNewLTV) external onlySecurityCouncil {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        s._setCollateralTokenLtv(_token, _tokenNewLTV);
     }
 
     /**
@@ -129,6 +134,11 @@ contract ProtocolFacet {
     function getBorrowDetails(uint256 _positionId, address _token) external view returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._calculateUserDebt(_positionId, _token, 0);
+    }
+
+    function getCollateralTokenLTV(address _token) external view returns (uint16) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s.s_collateralTokenLTV[_token];
     }
 
     // Modifiers

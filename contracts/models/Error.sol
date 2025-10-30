@@ -23,6 +23,7 @@ error NOT_LIQUIDATABLE();
 error NO_ACTIVE_BORROW_FOR_TOKEN(uint256 positionId, address token);
 error NO_COLLATERAL_FOR_TOKEN(uint256 positionId, address token);
 
+error LTV_BELOW_TEN_PERCENT();
 error TOKEN_OVERUTILIZATION();
 error NO_OUTSTANDING_DEBT(uint256 positionId, address token);
 

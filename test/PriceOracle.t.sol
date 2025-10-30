@@ -70,7 +70,7 @@ contract PriceOracleTest is Base {
     }
 
     function testGetTokenValueInUSDForDifferentDecimals() public {
-        protocolF.addCollateralToken(address(token3), pricefeed3);
+        protocolF.addCollateralToken(address(token3), pricefeed3, baseTokenLTV);
         uint256 _amount = 1000 * 1e6; // token2 has 6 decimals
 
         // Test with token2 which has 6 decimals and price $1
@@ -159,8 +159,8 @@ contract PriceOracleTest is Base {
     // }
 
     function addCollateralTokens() internal {
-        protocolF.addCollateralToken(address(token1), pricefeed1);
-        protocolF.addCollateralToken(address(token2), pricefeed2);
+        protocolF.addCollateralToken(address(token1), pricefeed1, baseTokenLTV);
+        protocolF.addCollateralToken(address(token2), pricefeed2, baseTokenLTV);
     }
 
     function deployPriceFeed() internal {

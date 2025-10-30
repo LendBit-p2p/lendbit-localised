@@ -20,6 +20,7 @@ event CollateralWithdrawn(uint256 indexed positionId, address indexed token, uin
 
 event CollateralTokenAdded(address indexed token);
 event CollateralTokenRemoved(address indexed token);
+event CollateralTokenLTVUpdated(address indexed token, uint16 tokenOldLTV, uint16 tokenNewLTV);
 
 event LocalCurrencyAdded(string currency);
 event LocalCurrencyRemoved(string currency);

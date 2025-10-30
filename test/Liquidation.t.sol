@@ -61,7 +61,6 @@ contract LiquidationTest is Base {
         vm.assertGt(_userCollateralBefore, protocolF.getPositionCollateral(_positionId, address(token1)));
     }
 
-
     function testLiquidatePositionWithNativeTokenCollateral_Success() public {
         createVaultAndFund(100e6);
         uint256 _positionId = depositCollateralFor(user1, address(1), 4 ether);
