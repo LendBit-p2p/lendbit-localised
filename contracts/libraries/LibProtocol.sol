@@ -58,7 +58,12 @@ library LibProtocol {
         emit CollateralWithdrawn(_positionId, _token, _amount);
     }
 
-    function _takeLoan(LibAppStorage.StorageLayout storage s, address _token, uint256 _principal, uint256 _tenureSeconds) internal returns (uint256) {
+    function _takeLoan(
+        LibAppStorage.StorageLayout storage s,
+        address _token,
+        uint256 _principal,
+        uint256 _tenureSeconds
+    ) internal returns (uint256) {
         uint256 _positionId = _positionIdCheck(s);
         if (!s.s_supportedToken[_token]) revert TOKEN_NOT_SUPPORTED(_token);
 
@@ -91,7 +96,10 @@ library LibProtocol {
         return _loanId;
     }
 
-    function _repayLoanFor(LibAppStorage.StorageLayout storage s, uint256 _positionId, uint256 _loanId, uint256 _amount) internal returns (uint256) {
+    function _repayLoanFor(LibAppStorage.StorageLayout storage s, uint256 _positionId, uint256 _loanId, uint256 _amount)
+        internal
+        returns (uint256)
+    {
         Loan storage _loan = s.s_loans[_loanId];
         if (_loan.positionId != _positionId) revert NOT_LOAN_OWNER(_positionId);
         if (_loan.status != LoanStatus.FULFILLED) revert INACTIVE_LOAN();
@@ -122,6 +130,14 @@ library LibProtocol {
 
         emit LoanRepayment(_positionId, _loanId, _loan.token, _amount);
         return _loanDebt - _amount;
+    }
+
+    function _repayLoan(LibAppStorage.StorageLayout storage s, uint256 _loanId, uint256 _amount)
+        internal
+        returns (uint256)
+    {
+        uint256 _positionId = _positionIdCheck(s);
+        return _repayLoanFor(s, _positionId, _loanId, _amount);
     }
 
     function _borrow(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount)
@@ -248,7 +264,9 @@ library LibProtocol {
         emit CollateralTokenRemoved(_token);
     }
 
-    function _setInterestRate(LibAppStorage.StorageLayout storage s, uint16 _newInterestRate, uint16 _newPenaltyRate) internal {
+    function _setInterestRate(LibAppStorage.StorageLayout storage s, uint16 _newInterestRate, uint16 _newPenaltyRate)
+        internal
+    {
         if (_newInterestRate == 0) revert AMOUNT_ZERO();
         if (_newPenaltyRate == 0) revert AMOUNT_ZERO();
         s.s_interestRate = _newInterestRate;
@@ -463,8 +481,12 @@ library LibProtocol {
 
         return _totalOwed - _loan.repaid;
     }
-    
-    function _outstandingBalance(LibAppStorage.StorageLayout storage s, uint256 _loanId, uint256 _timestamp) internal view returns (uint256) {
+
+    function _outstandingBalance(LibAppStorage.StorageLayout storage s, uint256 _loanId, uint256 _timestamp)
+        internal
+        view
+        returns (uint256)
+    {
         Loan memory _loan = s.s_loans[_loanId];
         return _outstandingBalance(_loan, _timestamp);
     }

@@ -54,6 +54,11 @@ contract ProtocolFacet {
         return s._repayLoanFor(positionId, loanId, _amount);
     }
 
+    function repayLoan(uint256 loanId, uint256 _amount) external returns (uint256) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._repayLoan(loanId, _amount);
+    }
+
     // function borrowCurrency(string calldata _currency, uint256 _amount) external {
     //     LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
     //     s._borrowCurrency(_currency, _amount);
