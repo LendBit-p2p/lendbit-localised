@@ -29,6 +29,12 @@ event BorrowComplete(uint256 indexed positionId, address indexed token, uint256 
 event Repay(uint256 indexed positionId, address indexed token, uint256 amount);
 event PositionLiquidated(uint256 indexed positionId, address indexed liquidator, address indexed token, uint256 amountToLiquidate);
 
+// Loan Events
+event InterestRateUpdated(uint16 newInterestRate, uint16 newPenaltyRate);
+event LoanTaken(uint256 indexed positionId, address indexed token, uint256 principal, uint256 tenureSeconds, uint16 annualRateBps);
+event LoanRepaid(uint256 indexed positionId, address indexed token, uint256 amount);
+event LoanLiquidated(uint256 indexed positionId, address indexed token, uint256 amountLiquidated);
+
 // Chainlink functions events
 event RequestSent(bytes32 indexed id);
 

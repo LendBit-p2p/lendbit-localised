@@ -34,7 +34,7 @@ library LibProtocol {
         _allowanceAndBalanceCheck(_token, _amount);
 
         s.s_positionCollateral[_positionId][_token] += _amount;
-        
+
         if (_token != Constants.NATIVE_TOKEN) {
             bool _success = ERC20(_token).transferFrom(msg.sender, address(this), _amount);
             if (!_success) revert TRANSFER_FAILED();
@@ -56,6 +56,39 @@ library LibProtocol {
 
         _transferToken(_token, msg.sender, _amount);
         emit CollateralWithdrawn(_positionId, _token, _amount);
+    }
+
+    function _takeLoan(LibAppStorage.StorageLayout storage s, address _token, uint256 _principal, uint256 _tenureSeconds) internal returns (uint256) {
+        uint256 _positionId = _positionIdCheck(s);
+        if (!s.s_supportedToken[_token]) revert TOKEN_NOT_SUPPORTED(_token);
+
+        (, uint256 _currentBorrowValue) = s._getTokenValueInUSD(_token, _principal);
+        uint256 _healthFactor = _getHealthFactor(s, _positionId, _currentBorrowValue);
+        if (_healthFactor < Constants.MIN_HEALTH_FACTOR) revert HEALTH_FACTOR_TOO_LOW(_healthFactor);
+
+        Loan memory _loan = Loan({
+            positionId: _positionId,
+            token: _token,
+            principal: _principal,
+            repaid: 0,
+            tenureSeconds: _tenureSeconds,
+            startTimestamp: block.timestamp,
+            annualRateBps: s.s_interestRate,
+            penaltyRateBps: s.s_penaltyRate,
+            status: LoanStatus.FULFILLED
+        });
+
+        uint256 _loanId = ++s.s_nextLoanId;
+        s.s_loans[_loanId] = _loan;
+        s.s_positionActiveLoanIds[_positionId].push(_loanId);
+
+        s._updateVaultBorrows(_loan.token, _loan.principal);
+
+        TokenVault _vault = s.i_tokenVault[_loan.token];
+        _vault.borrow(msg.sender, _loan.principal);
+
+        emit LoanTaken(_positionId, _loan.token, _loan.principal, _loan.tenureSeconds, _loan.annualRateBps);
+        return _loanId;
     }
 
     function _borrow(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount)
@@ -140,7 +173,12 @@ library LibProtocol {
         return _positionId;
     }
 
-    function _addCollateralToken(LibAppStorage.StorageLayout storage s, address _token, address _pricefeed, uint16 _tokenLTV) internal {
+    function _addCollateralToken(
+        LibAppStorage.StorageLayout storage s,
+        address _token,
+        address _pricefeed,
+        uint16 _tokenLTV
+    ) internal {
         if (_token == address(0)) revert ADDRESS_ZERO();
         if (_pricefeed == address(0)) revert ADDRESS_ZERO();
         if (_tokenLTV < 1000) revert LTV_BELOW_TEN_PERCENT();
@@ -175,7 +213,17 @@ library LibProtocol {
         emit CollateralTokenRemoved(_token);
     }
 
-    function _setCollateralTokenLtv(LibAppStorage.StorageLayout storage s, address _token, uint16 _tokenNewLTV) internal {
+    function _setInterestRate(LibAppStorage.StorageLayout storage s, uint16 _newInterestRate, uint16 _newPenaltyRate) internal {
+        if (_newInterestRate == 0) revert AMOUNT_ZERO();
+        if (_newPenaltyRate == 0) revert AMOUNT_ZERO();
+        s.s_interestRate = _newInterestRate;
+        s.s_penaltyRate = _newPenaltyRate;
+        emit InterestRateUpdated(_newInterestRate, _newPenaltyRate);
+    }
+
+    function _setCollateralTokenLtv(LibAppStorage.StorageLayout storage s, address _token, uint16 _tokenNewLTV)
+        internal
+    {
         if (_token == address(0)) revert ADDRESS_ZERO();
         if (_tokenNewLTV < 1000) revert LTV_BELOW_TEN_PERCENT();
         if (!s.s_supportedCollateralTokens[_token]) revert TOKEN_NOT_SUPPORTED_AS_COLLATERAL(_token);
@@ -184,6 +232,24 @@ library LibProtocol {
         s.s_collateralTokenLTV[_token] = _tokenNewLTV;
 
         emit CollateralTokenLTVUpdated(_token, _oldLTV, _tokenNewLTV);
+    }
+
+    /*
+     * @notice Removes a loan ID from the active loans list of a position
+     * @param _positionId The user position id
+     * @param _loanId The ID of the loan to remove
+     */
+    function _removeLoanFromActive(LibAppStorage.StorageLayout storage s, uint256 _positionId, uint256 _loanId)
+        internal
+    {
+        uint256[] storage list = s.s_positionActiveLoanIds[_positionId];
+        for (uint256 i = 0; i < list.length; i++) {
+            if (list[i] == _loanId) {
+                list[i] = list[list.length - 1];
+                list.pop();
+                return;
+            }
+        }
     }
 
     function _addLocalCurrencySupport(LibAppStorage.StorageLayout storage s, string calldata _currency) internal {
@@ -220,6 +286,23 @@ library LibProtocol {
         return _totalValue;
     }
 
+    function _getPositionBorrowableCollateralValue(LibAppStorage.StorageLayout storage s, uint256 _positionId)
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 _totalValue = 0;
+        address[] memory _tokens = s.s_allCollateralTokens;
+        for (uint256 i = 0; i < _tokens.length; i++) {
+            address _token = _tokens[i];
+            uint16 _ltv = s.s_collateralTokenLTV[_token];
+            uint256 _amount = s.s_positionCollateral[_positionId][_token];
+            (, uint256 _usdValue) = s._getTokenValueInUSD(_token, _amount);
+            _totalValue += (_usdValue * _ltv) / Constants.BASIS_POINTS_SCALE;
+        }
+        return _totalValue;
+    }
+
     function _getPositionCollateralTokenValue(
         LibAppStorage.StorageLayout storage s,
         uint256 _positionId,
@@ -246,21 +329,34 @@ library LibProtocol {
         return _totalValue;
     }
 
+    // function _getHealthFactor(LibAppStorage.StorageLayout storage s, uint256 _positionId, uint256 _currentBorrowValue)
+    //     internal
+    //     view
+    //     returns (uint256)
+    // {
+    //     uint256 _collateralValue = _getPositionBorrowableCollateralValue(s, _positionId);
+    //     uint256 _borrowedValue = _getPositionBorrowedValue(s, _positionId);
+
+    //     _borrowedValue += _currentBorrowValue;
+
+    //     if (_borrowedValue == 0) return (_collateralValue * Constants.PRECISION); // No debt means max health factor
+
+    //     return _collateralValue * Constants.PRECISION / _borrowedValue; // Health factor with 18 decimals
+    // }
+
     function _getHealthFactor(LibAppStorage.StorageLayout storage s, uint256 _positionId, uint256 _currentBorrowValue)
         internal
         view
         returns (uint256)
     {
-        uint256 _collateralValue = _getPositionCollateralValue(s, _positionId);
-        uint256 _borrowedValue = _getPositionBorrowedValue(s, _positionId);
-        uint256 _collateralAdjustedValue =
-            (_collateralValue * Constants.LIQUIDATION_THRESHOLD) / Constants.BASIS_POINTS_SCALE;
+        uint256 _collateralValue = _getPositionBorrowableCollateralValue(s, _positionId);
+        uint256 _borrowedValue = _totalActiveDebt(s, _positionId);
 
         _borrowedValue += _currentBorrowValue;
 
-        if (_borrowedValue == 0) return (_collateralAdjustedValue * Constants.PRECISION); // No debt means max health factor
+        if (_borrowedValue == 0) return (_collateralValue * Constants.PRECISION); // No debt means max health factor
 
-        return _collateralAdjustedValue * Constants.PRECISION / _borrowedValue; // Health factor with 18 decimals
+        return (_collateralValue * Constants.PRECISION) / _borrowedValue; // Health factor with 18 decimals
     }
 
     /**
@@ -281,13 +377,56 @@ library LibProtocol {
         VaultConfiguration memory _config = s.s_tokenVaultConfig[_token];
         uint256 _from = s.s_positionBorrowedLastUpdate[_positionId][_token];
 
-        uint256 timeElapsed = block.timestamp - _from;
+        uint256 _timeElapsed = block.timestamp - _from;
         uint256 utilization = LibInterestRateModel.calculateUtilization(_config.totalBorrows, _config.totalDeposits);
         uint256 interestRate = LibInterestRateModel.calculateInterestRate(_config, utilization);
-        uint256 factor = ((interestRate * timeElapsed) * 1e18) / (10000 * 365 days);
+        uint256 factor = ((interestRate * _timeElapsed) * 1e18) / (10000 * 365 days);
         debt = _amount + _tokenBorrows + ((_tokenBorrows * factor) / 1e18);
 
         return debt;
+    }
+
+    function _totalActiveDebt(LibAppStorage.StorageLayout storage s, uint256 _positionId)
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 _totalDebt = 0;
+
+        uint256[] memory _ids = s.s_positionActiveLoanIds[_positionId];
+        for (uint256 i = 0; i < _ids.length; i++) {
+            Loan memory _loan = s.s_loans[_ids[i]];
+            (, uint256 _debt) = s._getTokenValueInUSD(_loan.token, _outstandingBalance(_loan, block.timestamp));
+            _totalDebt += _debt;
+        }
+        return _totalDebt;
+    }
+
+    function _outstandingBalance(Loan memory _loan, uint256 _timestamp) internal pure returns (uint256) {
+        // Loan memory _loan = s.s_loans[_loanId];
+        if (_loan.status != LoanStatus.FULFILLED) return 0;
+
+        uint256 _timeElapsed = _timestamp - _loan.startTimestamp;
+        if (_timeElapsed > _loan.tenureSeconds) {
+            _timeElapsed = _loan.tenureSeconds;
+        }
+
+        uint256 _interest =
+            (_loan.principal * _loan.annualRateBps * _timeElapsed) / (Constants.BASIS_POINTS_SCALE_256 * 365 days);
+        uint256 _totalOwed = _loan.principal + _interest;
+
+        if (_timestamp > (_loan.startTimestamp + _loan.tenureSeconds)) {
+            uint256 penaltyTime = _timestamp - (_loan.startTimestamp + _loan.tenureSeconds);
+            uint256 penalty = (_loan.principal * (_loan.annualRateBps + _loan.penaltyRateBps) * penaltyTime)
+                / (Constants.BASIS_POINTS_SCALE_256 * 365 days);
+            _totalOwed += penalty;
+        }
+
+        if (_totalOwed <= _loan.repaid) {
+            return 0;
+        }
+
+        return _totalOwed - _loan.repaid;
     }
 
     function _transferToken(address _token, address _to, uint256 _amount) internal {
@@ -295,7 +434,7 @@ library LibProtocol {
         if (_amount == 0) revert AMOUNT_ZERO();
 
         if (_token == Constants.NATIVE_TOKEN) {
-            (bool sent, ) = _to.call{value: _amount}("");
+            (bool sent,) = _to.call{value: _amount}("");
             if (!sent) revert TRANSFER_FAILED();
             return;
         } else {

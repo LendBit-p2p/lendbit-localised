@@ -13,7 +13,7 @@ import "../contracts/Diamond.sol";
 
 import "../contracts/models/Error.sol";
 import "../contracts/models/Event.sol";
-import {RequestStatus, VaultConfiguration} from "../contracts/models/Protocol.sol";
+import {LoanStatus, VaultConfiguration} from "../contracts/models/Protocol.sol";
 import {Base, ERC20Mock} from "./Base.t.sol";
 
 contract ProtocolTest is Base {
@@ -311,6 +311,36 @@ contract ProtocolTest is Base {
 
         vm.expectRevert(abi.encodeWithSelector(TOKEN_NOT_SUPPORTED_AS_COLLATERAL.selector, _unsupportedCollateral));
         protocolF.setCollateralTokenLtv(_unsupportedCollateral, _newLTV);
+    }
+
+        function testSetInterestRate() public {
+        uint16 _newInterestRate = 5000; // 50%
+        uint16 _newPenaltyRate = 1000; // 10%
+
+        vm.expectEmit(true, true, true, false);
+        emit InterestRateUpdated(_newInterestRate, _newPenaltyRate);
+        protocolF.setInterestRate(_newInterestRate, _newPenaltyRate);
+
+        (uint16 _interestBps, uint16 _penaltyBps) = protocolF.getInterestRate();
+        assertEq(_newInterestRate, _interestBps);
+        assertEq(_newPenaltyRate, _penaltyBps);
+    }
+
+    function testSetInterestRateFailsIfNotSecurityCouncil() public {
+        uint16 _newInterestRate = 5000; // 50%
+        uint16 _newPenaltyRate = 1000; // 10%
+
+        vm.startPrank(user1);
+        vm.expectRevert("ONLY_SECURITY_COUNCIL()");
+        protocolF.setInterestRate(_newInterestRate, _newPenaltyRate);
+    }
+
+    function testSetInterestRateFailsIfRateIs0Percent() public {
+        uint16 _newInterestRate = 0;
+        uint16 _newPenaltyRate = 1000; // 10%
+
+        vm.expectRevert("AMOUNT_ZERO()");
+        protocolF.setInterestRate(_newInterestRate, _newPenaltyRate);
     }
 
     // =============================================================
@@ -752,6 +782,55 @@ contract ProtocolTest is Base {
     }
 
     // =============================================================
+    //                  TAKE TENURED LOAN TESTS
+    // =============================================================
+    function testTakeLoan() public {
+        createVaultAndFund(1000000e18);
+        uint256 _collateralAmount = 10000 * 1e18; // $15M worth of token1 (10k * $1500)
+        uint256 _borrowAmount = 1000 * 1e6; // $250k worth of token4 (1k * $250)
+        uint256 _tenure = 365 days;
+
+        // Deposit collateral first
+        token1.mint(user1, _collateralAmount);
+
+        vm.startPrank(user1);
+        token1.approve(address(diamond), _collateralAmount);
+        protocolF.depositCollateral(address(token1), _collateralAmount);
+
+        uint256 _positionId = positionManagerF.getPositionIdForUser(user1);
+        uint256 _healthFactor = protocolF.getHealthFactor(_positionId, 0);
+
+        uint256 loanId = protocolF.takeLoan(address(token4), _borrowAmount, _tenure);
+        uint256 totalDebt = protocolF.getTotalActiveDebt(_positionId);
+        vm.stopPrank();
+
+        assertEq(loanId, 1, "Loan ID should be 1 for the first loan");
+        assertLt(protocolF.getHealthFactor(_positionId, 0), _healthFactor);
+        assertEq(totalDebt, 250000e18);
+        assertEq(token4.balanceOf(user1), _borrowAmount);
+    }
+
+    function testTakeLoanFailsWithoutPosition() public {
+        uint256 borrowAmount = 1000 * 1e18;
+
+        vm.startPrank(user1);
+        vm.expectRevert(abi.encodeWithSelector(NO_POSITION_ID.selector, user1));
+        protocolF.takeLoan(address(token1), borrowAmount, 30 days);
+        vm.stopPrank();
+    }
+
+    function testTakeLoanFailsForUnsupportedToken() public {
+        // Create position first
+        positionManagerF.createPositionFor(user1);
+
+        vm.startPrank(user1);
+        vm.expectRevert(abi.encodeWithSelector(TOKEN_NOT_SUPPORTED.selector, address(token3)));
+        protocolF.takeLoan(address(token3), 1000 * 1e18, 30 days);
+        vm.stopPrank();
+    }
+
+
+    // =============================================================
     //                  LOCAL CURRENCY TESTS
     // =============================================================
 
@@ -1130,6 +1209,43 @@ contract ProtocolTest is Base {
         uint256 expectedValue = 7000 * 1e18; // the value is returned with 18 decimals
 
         uint256 collateralValue = protocolF.getPositionCollateralValue(positionId);
+        assertEq(collateralValue, expectedValue);
+    }
+
+    function testGetPositionBorrowableCollateralValue() public {
+        protocolF.addCollateralToken(address(token3), pricefeed3, baseTokenLTV);
+        uint256 depositAmount1 = 2 * 1e18; // 2 tokens of token1 (18 decimals)
+        uint256 depositAmount2 = 10 * 1e18; // 10 tokens of token2 (18 decimals)
+        uint256 depositAmount3 = 1000 * 1e6; // 1000 tokens of token3 (6 decimals)
+
+        // Deposit collateral
+        token1.mint(user1, depositAmount1);
+        token2.mint(user1, depositAmount2);
+        token3.mint(user1, depositAmount3);
+
+        protocolF.setCollateralTokenLtv(address(token2), 5000); // set to 50%
+        protocolF.setCollateralTokenLtv(address(token3), 5000); // set to 50%
+
+        vm.startPrank(user1);
+        token1.approve(address(diamond), depositAmount1);
+        token2.approve(address(diamond), depositAmount2);
+        token3.approve(address(diamond), depositAmount3);
+
+        protocolF.depositCollateral(address(token1), depositAmount1);
+        protocolF.depositCollateral(address(token2), depositAmount2);
+        protocolF.depositCollateral(address(token3), depositAmount3);
+        vm.stopPrank();
+
+        uint256 positionId = positionManagerF.getPositionIdForUser(user1);
+
+        // Calculate expected value
+        // token1: 2 * $1500 * 0.8 = $2400
+        // token2: 10 * $300 * 0.5 = $1500
+        // token3: 1000 * $1 * 0.5 = $500
+        // Total = $4400
+        uint256 expectedValue = 4400 * 1e18; // the value is returned with 18 decimals
+
+        uint256 collateralValue = protocolF.getPositionBorrowableCollateralValue(positionId);
         assertEq(collateralValue, expectedValue);
     }
 }

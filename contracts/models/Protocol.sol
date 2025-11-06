@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
+struct Loan {
+    uint256 positionId;
+    address token;
+    uint256 principal; // amount borrowed
+    uint256 repaid;
+    uint256 startTimestamp;
+    uint256 tenureSeconds;
+    uint16 annualRateBps;
+    uint16 penaltyRateBps;
+    LoanStatus status;
+}
+
 struct VaultConfiguration {
     uint16 reserveFactor; // in basis points
     uint16 optimalUtilization; // in basis points
@@ -12,11 +24,9 @@ struct VaultConfiguration {
     uint256 lastUpdated; // timestamp
 }
 
-enum RequestStatus {
-    NONE,
-    PENDING,
-    FULFILLED,
+enum LoanStatus {
     REJECTED,
+    FULFILLED,
     REPAID,
     LIQUIDATED
 }

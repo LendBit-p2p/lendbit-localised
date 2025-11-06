@@ -67,7 +67,7 @@ library LibPriceOracle {
         if (_isStale) revert STALE_PRICE_FEED(_token);
         if (_price <= 0) revert INVALID_PRICE_FEED(_token);
 
-        // Normalize to 10 decimals
+        // Normalize to 18 decimals
         uint8 _decimals = LibUtils._getTokenDecimals(_token);
         uint256 _usdValue = _calculateTokenUSDEquivalent(_decimals, _price, _amount);
 

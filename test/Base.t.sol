@@ -158,6 +158,7 @@ contract Base is Test, IDiamondCut {
 
         // Setup initial collateral tokens
         _setupInitialCollateralTokens();
+        protocolF.setInterestRate(2000, 500);
     }
 
     function _setupInitialCollateralTokens() internal {
