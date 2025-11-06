@@ -15,7 +15,7 @@ error TOKEN_ALREADY_SUPPORTED_AS_COLLATERAL(address asset);
 error TOKEN_NOT_SUPPORTED_AS_COLLATERAL(address asset);
 
 error AMOUNT_ZERO();
-error AMOUNT_MISMATCH(uint256 amount1, uint256 amount2);
+error AMOUNT_MISMATCH(uint256 given, uint256 expected);
 error TRANSFER_FAILED();
 error INSUFFICIENT_ALLOWANCE();
 error INSUFFICIENT_BALANCE();
@@ -23,6 +23,7 @@ error HEALTH_FACTOR_TOO_LOW(uint256 healthFactor);
 error NOT_LIQUIDATABLE();
 error NO_ACTIVE_BORROW_FOR_TOKEN(uint256 positionId, address token);
 error NO_COLLATERAL_FOR_TOKEN(uint256 positionId, address token);
+error NOT_LOAN_OWNER(uint256 positionId);
 
 error LTV_BELOW_TEN_PERCENT();
 error TOKEN_OVERUTILIZATION();

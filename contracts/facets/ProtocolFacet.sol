@@ -49,6 +49,11 @@ contract ProtocolFacet {
         return s._takeLoan(_token, _principal, _tenureSeconds);
     }
 
+    function repayLoanFor(uint256 positionId, uint256 loanId, uint256 _amount) external returns (uint256) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._repayLoanFor(positionId, loanId, _amount);
+    }
+
     // function borrowCurrency(string calldata _currency, uint256 _amount) external {
     //     LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
     //     s._borrowCurrency(_currency, _amount);
@@ -179,6 +184,11 @@ contract ProtocolFacet {
     function getTotalActiveDebt(uint256 _positionId) external view returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._totalActiveDebt(_positionId);
+    }
+
+    function getOutstandingDebtForLoan(uint256 _loanId) external view returns (uint256) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._outstandingBalance(_loanId, block.timestamp);
     }
 
     // Modifiers

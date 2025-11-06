@@ -91,6 +91,39 @@ library LibProtocol {
         return _loanId;
     }
 
+    function _repayLoanFor(LibAppStorage.StorageLayout storage s, uint256 _positionId, uint256 _loanId, uint256 _amount) internal returns (uint256) {
+        Loan storage _loan = s.s_loans[_loanId];
+        if (_loan.positionId != _positionId) revert NOT_LOAN_OWNER(_positionId);
+        if (_loan.status != LoanStatus.FULFILLED) revert INACTIVE_LOAN();
+
+        uint256 _loanDebt = _outstandingBalance(_loan, block.timestamp);
+        if (_loanDebt == 0) revert NO_OUTSTANDING_DEBT(_positionId, _loan.token);
+
+        _allowanceAndBalanceCheck(_loan.token, _amount);
+
+        if (_amount > _loanDebt) {
+            _amount = _loanDebt;
+        }
+
+        // Update loan repaid amount
+        _loan.repaid += _amount;
+
+        // If fully repaid, update loan status and move to closed loans
+        if (_loanDebt - _amount == 0) {
+            _loan.status = LoanStatus.REPAID;
+            _removeLoanFromActive(s, _positionId, _loanId);
+            s.s_positionClosedLoanIds[_positionId].push(_loanId);
+        }
+
+        s._updateVaultRepays(_loan.token, _amount);
+
+        bool _success = ERC20(_loan.token).transferFrom(msg.sender, address(s.i_tokenVault[_loan.token]), _amount);
+        if (!_success) revert TRANSFER_FAILED();
+
+        emit LoanRepayment(_positionId, _loanId, _loan.token, _amount);
+        return _loanDebt - _amount;
+    }
+
     function _borrow(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount)
         internal
         returns (uint256)
@@ -164,6 +197,8 @@ library LibProtocol {
         if (_token != Constants.NATIVE_TOKEN) {
             if (ERC20(_token).allowance(msg.sender, address(this)) < _amount) revert INSUFFICIENT_ALLOWANCE();
             if (ERC20(_token).balanceOf(msg.sender) < _amount) revert INSUFFICIENT_BALANCE();
+        } else {
+            if (msg.value < _amount) revert AMOUNT_MISMATCH(msg.value, _amount);
         }
     }
 
@@ -427,6 +462,11 @@ library LibProtocol {
         }
 
         return _totalOwed - _loan.repaid;
+    }
+    
+    function _outstandingBalance(LibAppStorage.StorageLayout storage s, uint256 _loanId, uint256 _timestamp) internal view returns (uint256) {
+        Loan memory _loan = s.s_loans[_loanId];
+        return _outstandingBalance(_loan, _timestamp);
     }
 
     function _transferToken(address _token, address _to, uint256 _amount) internal {
