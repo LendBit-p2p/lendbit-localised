@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-struct UserDetails {
+struct Loan {
     uint256 positionId;
-    address walletAddress;
-    KYCTier kycTier;
-}
-
-enum KYCTier {
-    NONE,
-    TIER_1,
-    TIER_2,
-    TIER_3
+    address token;
+    uint256 principal; // amount borrowed
+    uint256 repaid;
+    uint256 startTimestamp;
+    uint256 tenureSeconds;
+    uint16 annualRateBps;
+    uint16 penaltyRateBps;
+    LoanStatus status;
 }
 
 struct VaultConfiguration {
@@ -25,11 +24,9 @@ struct VaultConfiguration {
     uint256 lastUpdated; // timestamp
 }
 
-enum RequestStatus {
-    NONE,
-    PENDING,
-    FULFILLED,
+enum LoanStatus {
     REJECTED,
+    FULFILLED,
     REPAID,
     LIQUIDATED
 }

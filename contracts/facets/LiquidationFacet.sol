@@ -12,6 +12,15 @@ contract LiquidationFacet {
         return s._isLiquidatable(_positionId);
     }
 
+    function liquidateLoan(
+        uint256 _loanId,
+        uint256 _amount,
+        address _collateralToken
+    ) external {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        s._liquidateLoan(_loanId, _amount, _collateralToken);
+    }
+
     function liquidatePosition(uint256 _positionId, uint256 _amount, address _token, address _collateralToken)
         external
     {

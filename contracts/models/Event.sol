@@ -20,6 +20,7 @@ event CollateralWithdrawn(uint256 indexed positionId, address indexed token, uin
 
 event CollateralTokenAdded(address indexed token);
 event CollateralTokenRemoved(address indexed token);
+event CollateralTokenLTVUpdated(address indexed token, uint16 tokenOldLTV, uint16 tokenNewLTV);
 
 event LocalCurrencyAdded(string currency);
 event LocalCurrencyRemoved(string currency);
@@ -27,6 +28,12 @@ event LocalCurrencyRemoved(string currency);
 event BorrowComplete(uint256 indexed positionId, address indexed token, uint256 amount);
 event Repay(uint256 indexed positionId, address indexed token, uint256 amount);
 event PositionLiquidated(uint256 indexed positionId, address indexed liquidator, address indexed token, uint256 amountToLiquidate);
+
+// Loan Events
+event InterestRateUpdated(uint16 newInterestRate, uint16 newPenaltyRate);
+event LoanTaken(uint256 indexed positionId, address indexed token, uint256 principal, uint256 tenureSeconds, uint16 annualRateBps);
+event LoanRepayment(uint256 indexed positionId, uint256 indexed loanId, address indexed token, uint256 amount);
+event LoanLiquidated(uint256 indexed positionId, address indexed liquidator, address indexed token, uint256 amountLiquidated);
 
 // Chainlink functions events
 event RequestSent(bytes32 indexed id);

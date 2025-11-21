@@ -9,12 +9,11 @@ import "../contracts/facets/PriceOracleFacet.sol";
 import "../contracts/facets/ProtocolFacet.sol";
 import "../contracts/facets/PositionManagerFacet.sol";
 import "../contracts/facets/VaultManagerFacet.sol";
-import "forge-std/Test.sol";
 import "../contracts/Diamond.sol";
 
 import "../contracts/models/Error.sol";
 import "../contracts/models/Event.sol";
-import {RequestStatus, VaultConfiguration} from "../contracts/models/Protocol.sol";
+import {LoanStatus, VaultConfiguration} from "../contracts/models/Protocol.sol";
 import {Base, ERC20Mock} from "./Base.t.sol";
 
 contract ProtocolTest is Base {
@@ -31,8 +30,9 @@ contract ProtocolTest is Base {
 
         vm.expectEmit(true, false, false, false);
         emit CollateralTokenAdded(newToken);
-
-        protocolF.addCollateralToken(newToken, pricefeed1);
+        vm.expectEmit(true, true, true, false);
+        emit CollateralTokenLTVUpdated(newToken, 0, baseTokenLTV);
+        protocolF.addCollateralToken(newToken, pricefeed1, baseTokenLTV);
 
         assertTrue(protocolF.isCollateralTokenSupported(newToken));
 
@@ -43,6 +43,7 @@ contract ProtocolTest is Base {
                 found = true;
                 break;
             }
+            assertEq(protocolF.getCollateralTokenLTV(allTokens[i]), baseTokenLTV);
         }
         assertTrue(found, "Token should be in collateral tokens array");
     }
@@ -52,18 +53,25 @@ contract ProtocolTest is Base {
 
         vm.startPrank(nonAdmin);
         vm.expectRevert(abi.encodeWithSelector(ONLY_SECURITY_COUNCIL.selector));
-        protocolF.addCollateralToken(newToken, pricefeed1);
+        protocolF.addCollateralToken(newToken, pricefeed1, baseTokenLTV);
         vm.stopPrank();
     }
 
     function testAddCollateralTokenFailsForAddressZero() public {
         vm.expectRevert(abi.encodeWithSelector(ADDRESS_ZERO.selector));
-        protocolF.addCollateralToken(address(0), address(0));
+        protocolF.addCollateralToken(address(0), address(0), baseTokenLTV);
+    }
+
+    function testAddCollateralTokenFailsForLTVBelow10Percent() public {
+        address newToken = address(0x123);
+
+        vm.expectRevert("LTV_BELOW_TEN_PERCENT()");
+        protocolF.addCollateralToken(newToken, pricefeed1, 999);
     }
 
     function testAddCollateralTokenFailsIfAlreadySupported() public {
         vm.expectRevert(abi.encodeWithSelector(TOKEN_ALREADY_SUPPORTED_AS_COLLATERAL.selector, address(token1)));
-        protocolF.addCollateralToken(address(token1), pricefeed1);
+        protocolF.addCollateralToken(address(token1), pricefeed1, baseTokenLTV);
     }
 
     // =============================================================
@@ -147,7 +155,7 @@ contract ProtocolTest is Base {
         assertEq(positionManagerF.getPositionIdForUser(user1), 1);
     }
 
-        function testDepositNativeTokenCollateral() public {
+    function testDepositNativeTokenCollateral() public {
         uint256 depositAmount = 1000 * 1e18;
         vm.deal(user1, depositAmount);
 
@@ -265,6 +273,76 @@ contract ProtocolTest is Base {
         vm.stopPrank();
     }
 
+    function testSetCollateralTokenLTV() public {
+        uint16 _newLTV = 5000; // 50%
+
+        vm.expectEmit(true, true, true, false);
+        emit CollateralTokenLTVUpdated(address(token1), baseTokenLTV, _newLTV);
+        protocolF.setCollateralTokenLtv(address(token1), _newLTV);
+
+        assertEq(_newLTV, protocolF.getCollateralTokenLTV(address(token1)));
+    }
+
+    function testSetCollateralTokenLTVFailsIfNotSecurityCouncil() public {
+        uint16 _newLTV = 5000; // 50%
+
+        vm.startPrank(user1);
+        vm.expectRevert("ONLY_SECURITY_COUNCIL()");
+        protocolF.setCollateralTokenLtv(address(token1), _newLTV);
+    }
+
+    function testSetCollateralTokenLTVFailsIfLTVBelow10Percent() public {
+        uint16 _newLTV = 900; // 9%
+
+        vm.expectRevert("LTV_BELOW_TEN_PERCENT()");
+        protocolF.setCollateralTokenLtv(address(token1), _newLTV);
+    }
+
+    function testSetCollateralTokenLTVFailsForAddressZero() public {
+        uint16 _newLTV = 1000; // 10%
+
+        vm.expectRevert("ADDRESS_ZERO()");
+        protocolF.setCollateralTokenLtv(address(0), _newLTV);
+    }
+
+    function testSetCollateralTokenLTVFailsIfTokenIsNotSupportedCollateral() public {
+        uint16 _newLTV = 5000; // 50%
+        address _unsupportedCollateral = address(0x123);
+
+        vm.expectRevert(abi.encodeWithSelector(TOKEN_NOT_SUPPORTED_AS_COLLATERAL.selector, _unsupportedCollateral));
+        protocolF.setCollateralTokenLtv(_unsupportedCollateral, _newLTV);
+    }
+
+    function testSetInterestRate() public {
+        uint16 _newInterestRate = 5000; // 50%
+        uint16 _newPenaltyRate = 1000; // 10%
+
+        vm.expectEmit(true, true, true, false);
+        emit InterestRateUpdated(_newInterestRate, _newPenaltyRate);
+        protocolF.setInterestRate(_newInterestRate, _newPenaltyRate);
+
+        (uint16 _interestBps, uint16 _penaltyBps) = protocolF.getInterestRate();
+        assertEq(_newInterestRate, _interestBps);
+        assertEq(_newPenaltyRate, _penaltyBps);
+    }
+
+    function testSetInterestRateFailsIfNotSecurityCouncil() public {
+        uint16 _newInterestRate = 5000; // 50%
+        uint16 _newPenaltyRate = 1000; // 10%
+
+        vm.startPrank(user1);
+        vm.expectRevert("ONLY_SECURITY_COUNCIL()");
+        protocolF.setInterestRate(_newInterestRate, _newPenaltyRate);
+    }
+
+    function testSetInterestRateFailsIfRateIs0Percent() public {
+        uint16 _newInterestRate = 0;
+        uint16 _newPenaltyRate = 1000; // 10%
+
+        vm.expectRevert("AMOUNT_ZERO()");
+        protocolF.setInterestRate(_newInterestRate, _newPenaltyRate);
+    }
+
     // =============================================================
     //                   WITHDRAW COLLATERAL TESTS
     // =============================================================
@@ -300,7 +378,7 @@ contract ProtocolTest is Base {
         assertEq(token1.balanceOf(address(diamond)), remainingCollateral);
     }
 
-        function testWithdrawNativeTokenCollateral() public {
+    function testWithdrawNativeTokenCollateral() public {
         uint256 depositAmount = 1000 * 1e18;
         uint256 withdrawAmount = 300 * 1e18;
 
@@ -324,7 +402,6 @@ contract ProtocolTest is Base {
         assertEq(user1.balance, withdrawAmount);
         assertEq(address(diamond).balance, remainingCollateral);
     }
-
 
     function testWithdrawAllCollateral() public {
         uint256 depositAmount = 1000 * 1e18;
@@ -704,6 +781,301 @@ contract ProtocolTest is Base {
     }
 
     // =============================================================
+    //                  TAKE TENURED LOAN TESTS
+    // =============================================================
+    function testTakeLoan() public {
+        createVaultAndFund(1000000e18);
+        uint256 _collateralAmount = 10000 * 1e18; // $15M worth of token1 (10k * $1500)
+        uint256 _borrowAmount = 1000 * 1e6; // $250k worth of token4 (1k * $250)
+        uint256 _tenure = 365 days;
+
+        // Deposit collateral first
+        token1.mint(user1, _collateralAmount);
+
+        vm.startPrank(user1);
+        token1.approve(address(diamond), _collateralAmount);
+        protocolF.depositCollateral(address(token1), _collateralAmount);
+        uint256 _vaultBalenceBefore = token4.balanceOf(vault);
+
+        uint256 _positionId = positionManagerF.getPositionIdForUser(user1);
+        uint256 _healthFactor = protocolF.getHealthFactor(_positionId, 0);
+
+        uint256 loanId = protocolF.takeLoan(address(token4), _borrowAmount, _tenure);
+        uint256 totalDebt = protocolF.getTotalActiveDebt(_positionId);
+        vm.stopPrank();
+
+        assertEq(loanId, 1, "Loan ID should be 1 for the first loan");
+        assertLt(protocolF.getHealthFactor(_positionId, 0), _healthFactor);
+        assertEq(totalDebt, 250000e18);
+        assertEq(token4.balanceOf(user1), _borrowAmount);
+        assertEq(token4.balanceOf(vault), _vaultBalenceBefore - _borrowAmount);
+    }
+
+    function testTakeLoanFailsWithoutPosition() public {
+        uint256 borrowAmount = 1000 * 1e18;
+
+        vm.startPrank(user1);
+        vm.expectRevert(abi.encodeWithSelector(NO_POSITION_ID.selector, user1));
+        protocolF.takeLoan(address(token1), borrowAmount, 30 days);
+        vm.stopPrank();
+    }
+
+    function testTakeLoanFailsForUnsupportedToken() public {
+        // Create position first
+        positionManagerF.createPositionFor(user1);
+
+        vm.startPrank(user1);
+        vm.expectRevert(abi.encodeWithSelector(TOKEN_NOT_SUPPORTED.selector, address(token3)));
+        protocolF.takeLoan(address(token3), 1000 * 1e18, 30 days);
+        vm.stopPrank();
+    }
+
+    function testRepayLoanForSuccess() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        uint256 _positionId = depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
+
+        uint256 _vaultBalance = token4.balanceOf(vault);
+
+        vm.warp(block.timestamp + (365 days / 2)); // Warp half the tenure to accrue some interest
+
+        uint256 _debtBeforeRepay = protocolF.getOutstandingDebtForLoan(_loanId);
+
+        // Mint tokens to user1 for repayment
+        token4.mint(user1, _debtBeforeRepay);
+        token4.approve(address(diamond), _debtBeforeRepay);
+
+        // Repay full amount
+        uint256 remainingDebt = protocolF.repayLoanFor(_positionId, _loanId, _debtBeforeRepay);
+        assertEq(remainingDebt, 0, "Debt should be zero after full repayment");
+        assertEq(token4.balanceOf(vault), _vaultBalance + _debtBeforeRepay);
+        vm.stopPrank();
+    }
+
+    function testRepayLoanForPartial() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        uint256 _positionId = depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 30 days);
+        vm.warp(block.timestamp + 15 days); // Warp half the tenure to accrue some interest
+
+        // Mint tokens to user1 for partial repayment
+        uint256 partialRepay = borrowAmount;
+        token4.mint(user1, partialRepay);
+        token4.approve(address(diamond), partialRepay);
+
+        uint256 remainingDebt = protocolF.repayLoanFor(_positionId, _loanId, partialRepay);
+
+        assertGt(remainingDebt, 0, "Debt should remain after partial repayment");
+        assertLt(remainingDebt, borrowAmount, "Debt should be less than initial borrow");
+        vm.stopPrank();
+    }
+
+    function testRepayLoanForFailsForInsufficientAllowance() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        uint256 _positionId = depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 30 days);
+
+        // Mint tokens but do not approve
+        token4.mint(user1, borrowAmount);
+
+        vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_ALLOWANCE.selector));
+        protocolF.repayLoanFor(_positionId, _loanId, borrowAmount);
+        vm.stopPrank();
+    }
+
+    function testRepayLoanForFailsForInsufficientBalance() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        uint256 _positionId = depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
+        token4.transfer(user2, borrowAmount); // reduce token balance for user1
+
+        // Approve but do not mint enough tokens
+        token4.approve(address(diamond), borrowAmount);
+
+        vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_BALANCE.selector));
+        protocolF.repayLoanFor(_positionId, _loanId, borrowAmount);
+        vm.stopPrank();
+    }
+
+    function testRepayLoanForMoreThanDebt() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        uint256 _positionId = depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
+
+        // Mint and approve more than debt
+        token4.mint(user1, borrowAmount * 2);
+        token4.approve(address(diamond), borrowAmount * 2);
+        uint256 balanceBeforeRepay = token4.balanceOf(user1);
+        vm.warp(block.timestamp + 30 days); // Warp to accrue some interest
+
+        uint256 debtBeforeRepay = protocolF.getOutstandingDebtForLoan(_loanId);
+        uint256 remainingDebt = protocolF.repayLoanFor(_positionId, _loanId, borrowAmount * 2);
+
+        assertEq(remainingDebt, 0, "Debt should be zero after over-repayment");
+        assertEq(token4.balanceOf(user1), balanceBeforeRepay - debtBeforeRepay);
+        vm.stopPrank();
+    }
+
+
+function testRepayLoanSuccess() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
+
+        uint256 _vaultBalance = token4.balanceOf(vault);
+
+        vm.warp(block.timestamp + (365 days / 2)); // Warp half the tenure to accrue some interest
+
+        uint256 _debtBeforeRepay = protocolF.getOutstandingDebtForLoan(_loanId);
+
+        // Mint tokens to user1 for repayment
+        token4.mint(user1, _debtBeforeRepay);
+        token4.approve(address(diamond), _debtBeforeRepay);
+
+        // Repay full amount
+        uint256 remainingDebt = protocolF.repayLoan(_loanId, _debtBeforeRepay);
+        assertEq(remainingDebt, 0, "Debt should be zero after full repayment");
+        assertEq(token4.balanceOf(vault), _vaultBalance + _debtBeforeRepay);
+        vm.stopPrank();
+    }
+
+    function testRepayLoanPartial() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 30 days);
+        vm.warp(block.timestamp + 15 days); // Warp half the tenure to accrue some interest
+
+        // Mint tokens to user1 for partial repayment
+        uint256 partialRepay = borrowAmount;
+        token4.mint(user1, partialRepay);
+        token4.approve(address(diamond), partialRepay);
+
+        uint256 remainingDebt = protocolF.repayLoan(_loanId, partialRepay);
+
+        assertGt(remainingDebt, 0, "Debt should remain after partial repayment");
+        assertLt(remainingDebt, borrowAmount, "Debt should be less than initial borrow");
+        vm.stopPrank();
+    }
+
+    function testRepayLoanFailsForInsufficientAllowance() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 30 days);
+
+        // Mint tokens but do not approve
+        token4.mint(user1, borrowAmount);
+
+        vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_ALLOWANCE.selector));
+        protocolF.repayLoan(_loanId, borrowAmount);
+        vm.stopPrank();
+    }
+
+    function testRepayLoanFailsForInsufficientBalance() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
+        token4.transfer(user2, borrowAmount); // reduce token balance for user1
+
+        // Approve but do not mint enough tokens
+        token4.approve(address(diamond), borrowAmount);
+
+        vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_BALANCE.selector));
+        protocolF.repayLoan(_loanId, borrowAmount);
+        vm.stopPrank();
+    }
+
+    function testRepayLoanMoreThanDebt() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
+
+        // Mint and approve more than debt
+        token4.mint(user1, borrowAmount * 2);
+        token4.approve(address(diamond), borrowAmount * 2);
+        uint256 balanceBeforeRepay = token4.balanceOf(user1);
+        vm.warp(block.timestamp + 30 days); // Warp to accrue some interest
+
+        uint256 debtBeforeRepay = protocolF.getOutstandingDebtForLoan(_loanId);
+        uint256 remainingDebt = protocolF.repayLoan(_loanId, borrowAmount * 2);
+
+        assertEq(remainingDebt, 0, "Debt should be zero after over-repayment");
+        assertEq(token4.balanceOf(user1), balanceBeforeRepay - debtBeforeRepay);
+        vm.stopPrank();
+    }
+
+    function testRepayLoanFailsIfSenderIsNotOwnerOfLoan() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+        uint256 _positionId = depositCollateralFor(user2, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
+        vm.stopPrank();
+
+        // Attempt to repay from a different user
+        vm.startPrank(user2);
+        token4.mint(user2, borrowAmount);
+        token4.approve(address(diamond), borrowAmount);
+
+        vm.expectRevert(abi.encodeWithSelector(NOT_LOAN_OWNER.selector, _positionId));
+        protocolF.repayLoan(_loanId, borrowAmount);
+        vm.stopPrank();
+    }
+
+    // =============================================================
     //                  LOCAL CURRENCY TESTS
     // =============================================================
 
@@ -979,7 +1351,7 @@ contract ProtocolTest is Base {
 
     function testGetAllCollateralTokensAfterAddingAndRemoving() public {
         // Add a new token
-        protocolF.addCollateralToken(address(token3), pricefeed3);
+        protocolF.addCollateralToken(address(token3), pricefeed3, baseTokenLTV);
 
         address[] memory tokens = protocolF.getAllCollateralTokens();
         assertEq(tokens.length, 4);
@@ -1052,7 +1424,7 @@ contract ProtocolTest is Base {
     }
 
     function testGetPositionCollateralValue() public {
-        protocolF.addCollateralToken(address(token3), pricefeed3);
+        protocolF.addCollateralToken(address(token3), pricefeed3, baseTokenLTV);
         uint256 depositAmount1 = 2 * 1e18; // 2 tokens of token1 (18 decimals)
         uint256 depositAmount2 = 10 * 1e18; // 10 tokens of token2 (18 decimals)
         uint256 depositAmount3 = 1000 * 1e6; // 1000 tokens of token3 (6 decimals)
@@ -1082,6 +1454,43 @@ contract ProtocolTest is Base {
         uint256 expectedValue = 7000 * 1e18; // the value is returned with 18 decimals
 
         uint256 collateralValue = protocolF.getPositionCollateralValue(positionId);
+        assertEq(collateralValue, expectedValue);
+    }
+
+    function testGetPositionBorrowableCollateralValue() public {
+        protocolF.addCollateralToken(address(token3), pricefeed3, baseTokenLTV);
+        uint256 depositAmount1 = 2 * 1e18; // 2 tokens of token1 (18 decimals)
+        uint256 depositAmount2 = 10 * 1e18; // 10 tokens of token2 (18 decimals)
+        uint256 depositAmount3 = 1000 * 1e6; // 1000 tokens of token3 (6 decimals)
+
+        // Deposit collateral
+        token1.mint(user1, depositAmount1);
+        token2.mint(user1, depositAmount2);
+        token3.mint(user1, depositAmount3);
+
+        protocolF.setCollateralTokenLtv(address(token2), 5000); // set to 50%
+        protocolF.setCollateralTokenLtv(address(token3), 5000); // set to 50%
+
+        vm.startPrank(user1);
+        token1.approve(address(diamond), depositAmount1);
+        token2.approve(address(diamond), depositAmount2);
+        token3.approve(address(diamond), depositAmount3);
+
+        protocolF.depositCollateral(address(token1), depositAmount1);
+        protocolF.depositCollateral(address(token2), depositAmount2);
+        protocolF.depositCollateral(address(token3), depositAmount3);
+        vm.stopPrank();
+
+        uint256 positionId = positionManagerF.getPositionIdForUser(user1);
+
+        // Calculate expected value
+        // token1: 2 * $1500 * 0.8 = $2400
+        // token2: 10 * $300 * 0.5 = $1500
+        // token3: 1000 * $1 * 0.5 = $500
+        // Total = $4400
+        uint256 expectedValue = 4400 * 1e18; // the value is returned with 18 decimals
+
+        uint256 collateralValue = protocolF.getPositionBorrowableCollateralValue(positionId);
         assertEq(collateralValue, expectedValue);
     }
 }

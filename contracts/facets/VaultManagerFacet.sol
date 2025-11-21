@@ -11,12 +11,12 @@ import "../models/Error.sol";
 contract VaultManagerFacet {
     using LibVaultManager for LibAppStorage.StorageLayout;
 
-    function deposit(address _token, uint256 _amount) external onlySecurityCouncil returns (uint256) {
+    function deposit(address _token, uint256 _amount) external returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._deposit(msg.sender, _token, _amount);
     }
 
-    function withdraw(address _token, uint256 _amount) external onlySecurityCouncil {
+    function withdraw(address _token, uint256 _amount) external {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         s._withdraw(msg.sender, _token, _amount);
     }

@@ -15,6 +15,7 @@ library Constants {
     uint8 constant DEFAULT_COMPOUNDING_PERIODS = 12; // Monthly compounding
     uint8 constant PRECISION_SCALE = 18; // High precision for calculations
     uint16 constant BASIS_POINTS_SCALE = 1e4; // 100% = 10000 basis points
+    uint256 constant BASIS_POINTS_SCALE_256 = 1e4; // 100% = 10000 basis points
     uint32 constant MAX_APR_BASIS_POINTS = 1e6; // Maximum 10000% APR
     uint256 constant ZERO = 0;
 }
