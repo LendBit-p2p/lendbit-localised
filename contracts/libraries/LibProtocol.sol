@@ -403,7 +403,7 @@ library LibProtocol {
         returns (uint256)
     {
         uint256 _collateralValue = _getPositionBorrowableCollateralValue(s, _positionId);
-        uint256 _borrowedValue = _totalActiveDebt(s, _positionId);
+        uint256 _borrowedValue = _totalActiveDebt(s, _positionId) + _getPositionBorrowedValue(s, _positionId);
 
         _borrowedValue += _currentBorrowValue;
 

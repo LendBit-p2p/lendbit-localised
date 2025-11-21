@@ -34,9 +34,13 @@ contract Deployment is Script, IDiamondCut {
     address token1;
     address token2;
     address token3; // borrow token
+    address token4;
+    address token5;
     address pricefeed1;
     address pricefeed2;
     address pricefeed3; // borrow token pricefeed
+    address pricefeed4;
+    address pricefeed5;
 
 
     VaultConfiguration defaultConfig = VaultConfiguration({
@@ -149,13 +153,18 @@ contract Deployment is Script, IDiamondCut {
         token1 = 0xFaEc9cDC3Ef75713b48f46057B98BA04885e3391; // EURC
         token2 = 0xb2b2130b4B83Af141cFc4C5E3dEB1897eB336D79; // LINK
         token3 = 0xc4e08f4e2E50efF89B476c9416F0B7B607EDB71a; // address(new ERC20Mock(6)); // CNGN
+        token4 = 0x036CbD53842c5426634e7929541eC2318f3dCF7e; // USDC
+        token5 = address(1); //Native token placeholder
 
         pricefeed1 = 0xD1092a65338d049DB68D7Be6bD89d17a0929945e; // DAI/USD
         pricefeed2 = 0xb113F5A928BCfF189C998ab20d753a47F9dE5A61; // LINK/USD
         pricefeed3 = 0xe73b80A97C77982Fc2C99F47A5b4e3Be5463E084; // address(new MockV3Aggregator(8, 1500e8)); // CNGN/USD
+        pricefeed4 = 0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165; // USDC/USD
+        pricefeed5 = 0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1; // ETH/USD
 
         // Setup initial collateral tokens
         _setupInitialCollateralAndBorrowTokens();
+        protocolF.setInterestRate(2000, 500);
 
         positionManagerF.createPositionFor(msg.sender);
         ERC20Mock(token3).mint(msg.sender, 500000e6); // mint 500000 CNGN to msg.sender
@@ -168,9 +177,10 @@ contract Deployment is Script, IDiamondCut {
     }
 
     function _setupInitialCollateralAndBorrowTokens() internal {
-        protocolF.addCollateralToken(token1, pricefeed1);
-        protocolF.addCollateralToken(token2, pricefeed2);
-        protocolF.addCollateralToken(token3, pricefeed3);
+        protocolF.addCollateralToken(token1, pricefeed1, 8000);
+        protocolF.addCollateralToken(token2, pricefeed2, 8000);
+        protocolF.addCollateralToken(token3, pricefeed3, 7000);
+        protocolF.addCollateralToken(token4, pricefeed4, 8000);
 
         vaultManagerF.deployVault(token3, pricefeed3, "Hodl CNGN", "HCNGN", defaultConfig);
     }
