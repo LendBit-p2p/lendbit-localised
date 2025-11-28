@@ -9,6 +9,7 @@ import {LibPositionManager} from "./LibPositionManager.sol";
 import {LibPriceOracle} from "./LibPriceOracle.sol";
 import {LibUtils} from "./LibUtils.sol";
 import {LibVaultManager} from "./LibVaultManager.sol";
+import {LibYieldStrategy} from "./LibYieldStrategy.sol";
 
 import {Constants} from "../models/Constant.sol";
 import "../models/Error.sol";
@@ -39,6 +40,8 @@ library LibProtocol {
             bool _success = ERC20(_token).transferFrom(msg.sender, address(this), _amount);
             if (!_success) revert TRANSFER_FAILED();
         }
+
+        LibYieldStrategy._rebalancePosition(s, _positionId, _token);
         emit CollateralDeposited(_positionId, _token, _amount);
     }
 
@@ -53,6 +56,9 @@ library LibProtocol {
         if (_borrowValue > 0) {
             if (_healthFactor < Constants.MIN_HEALTH_FACTOR) revert HEALTH_FACTOR_TOO_LOW(_healthFactor);
         }
+
+        LibYieldStrategy._rebalancePosition(s, _positionId, _token);
+        LibYieldStrategy._ensureSufficientIdle(s, _positionId, _token, _amount);
 
         _transferToken(_token, msg.sender, _amount);
         emit CollateralWithdrawn(_positionId, _token, _amount);
@@ -171,10 +177,7 @@ library LibProtocol {
         return s.s_positionBorrowed[_positionId][_token];
     }
 
-    function _repay(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount)
-        internal
-        returns (uint256)
-    {
+    function _repay(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount) internal returns (uint256) {
         uint256 _positionId = _positionIdCheck(s);
 
         uint256 _debt = s.s_positionBorrowed[_positionId][_token];
@@ -198,9 +201,7 @@ library LibProtocol {
         return _calculateUserDebt(s, _positionId, _token, 0);
     }
 
-    function _repayStateChanges(LibAppStorage.StorageLayout storage s, RepayStateChangeParams memory _params)
-        internal
-    {
+    function _repayStateChanges(LibAppStorage.StorageLayout storage s, RepayStateChangeParams memory _params) internal {
         uint256 _totalDebt = _calculateUserDebt(s, _params.positionId, _params.token, 0);
         s.s_positionBorrowed[_params.positionId][_params.token] = _totalDebt - _params.amount;
         s.s_positionBorrowedLastUpdate[_params.positionId][_params.token] = block.timestamp;

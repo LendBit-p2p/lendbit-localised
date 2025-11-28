@@ -73,7 +73,9 @@ library LibVaultManager {
         string memory _symbol,
         VaultConfiguration memory _config
     ) internal returns (address) {
-        if ((_token == address(0)) || (_pricefeed == address(0))) revert ADDRESS_ZERO();
+        if ((_token == address(0)) || (_pricefeed == address(0))) {
+            revert ADDRESS_ZERO();
+        }
         if (address(s.i_tokenVault[_token]) != address(0)) {
             revert TOKEN_ALREADY_SUPPORTED(_token, address(s.i_tokenVault[_token]));
         }

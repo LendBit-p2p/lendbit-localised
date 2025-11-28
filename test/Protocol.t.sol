@@ -941,8 +941,7 @@ contract ProtocolTest is Base {
         vm.stopPrank();
     }
 
-
-function testRepayLoanSuccess() public {
+    function testRepayLoanSuccess() public {
         createVaultAndFund(1000000e18);
         uint256 collateralAmount = 10000 * 1e18;
         uint256 borrowAmount = 1000 * 1e6;

@@ -7,6 +7,7 @@ import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interface
 import {TokenVault} from "../TokenVault.sol";
 
 import "../models/Protocol.sol";
+import "../models/Yield.sol";
 
 library LibAppStorage {
     struct StorageLayout {
@@ -43,6 +44,11 @@ library LibAppStorage {
         mapping(uint256 => Loan) s_loans; // loanId -> Loan struct
         mapping(uint256 => uint256[]) s_positionActiveLoanIds; // positionId -> list of loanIds
         mapping(uint256 => uint256[]) s_positionClosedLoanIds; // positionId -> list of closed loanIds
+
+        // yield strategy state
+        mapping(address => YieldStrategyConfig) s_yieldConfigs; // collateral token -> yield config
+        mapping(uint256 => mapping(address => YieldPosition)) s_positionYield; // positionId -> (token -> yield position)
+        mapping(address => bool) s_yieldApprovals; // collateral token -> approval flag for Aave pool
 
         // Chainlink functions variables
         uint32 s_gasLimit;

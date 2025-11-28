@@ -8,6 +8,7 @@ import {LibPriceOracle} from "../libraries/LibPriceOracle.sol";
 import {LibProtocol} from "../libraries/LibProtocol.sol";
 import {LibVaultManager} from "../libraries/LibVaultManager.sol";
 import {LibUtils} from "../libraries/LibUtils.sol";
+import {LibYieldStrategy} from "../libraries/LibYieldStrategy.sol";
 
 import {Constants} from "../models/Constant.sol";
 import "../models/Error.sol";
@@ -37,6 +38,8 @@ library LibLiquidation {
         uint256 _amountToLiquidate = _getAmountToLiquidate(s, _loan.positionId, _collateralToken, _loan.token, _amount);
 
         s.s_positionCollateral[_loan.positionId][_collateralToken] -= _amountToLiquidate;
+        LibYieldStrategy._rebalancePosition(s, _loan.positionId, _collateralToken);
+        LibYieldStrategy._ensureSufficientIdle(s, _loan.positionId, _collateralToken, _amountToLiquidate);
 
         // Update loan repaid amount
         _loan.repaid += _amount;
@@ -51,7 +54,6 @@ library LibLiquidation {
         }
 
         LibVaultManager._updateVaultRepays(s, _loan.token, _amount);
-
 
         ERC20 _tokenI = ERC20(_loan.token);
         bool _success = _tokenI.transferFrom(msg.sender, address(s.i_tokenVault[_loan.token]), _amount);
@@ -70,23 +72,23 @@ library LibLiquidation {
         address _token,
         address _collateralToken
     ) internal {
-        if (s.s_positionBorrowed[_positionId][_token] == 0) revert NO_ACTIVE_BORROW_FOR_TOKEN(_positionId, _token);
+        if (s.s_positionBorrowed[_positionId][_token] == 0) {
+            revert NO_ACTIVE_BORROW_FOR_TOKEN(_positionId, _token);
+        }
         _liquidationCheck(s, _positionId, _token, _collateralToken, _amount);
 
         uint256 _amountToLiquidate = _getAmountToLiquidate(s, _positionId, _collateralToken, _token, _amount);
 
         s.s_positionCollateral[_positionId][_collateralToken] -= _amountToLiquidate;
+        LibYieldStrategy._rebalancePosition(s, _positionId, _collateralToken);
+        LibYieldStrategy._ensureSufficientIdle(s, _positionId, _collateralToken, _amountToLiquidate);
 
         RepayStateChangeParams memory _params = RepayStateChangeParams({
             positionId: _positionId,
             token: _token,
-            amount: (
-                _amount
-                    * (
-                        (Constants.BASIS_POINTS_SCALE - s.s_tokenVaultConfig[_token].liquidationBonus)
-                            / Constants.BASIS_POINTS_SCALE
-                    )
-            )
+            amount: (_amount
+                    * ((Constants.BASIS_POINTS_SCALE - s.s_tokenVaultConfig[_token].liquidationBonus)
+                        / Constants.BASIS_POINTS_SCALE))
         });
         s._repayStateChanges(_params);
 
@@ -113,7 +115,13 @@ library LibLiquidation {
         LibProtocol._allowanceAndBalanceCheck(_token, _amount);
     }
 
-    function _getAmountToLiquidate(LibAppStorage.StorageLayout storage s, uint256 _positionId, address _collateralToken, address _token, uint256 _amount) internal view returns (uint256) { 
+    function _getAmountToLiquidate(
+        LibAppStorage.StorageLayout storage s,
+        uint256 _positionId,
+        address _collateralToken,
+        address _token,
+        uint256 _amount
+    ) internal view returns (uint256) {
         uint256 _collateralAmount = s.s_positionCollateral[_positionId][_collateralToken];
         (uint256 _collateralPricePerToken, uint256 _collateralValue) =
             s._getTokenValueInUSD(_collateralToken, _collateralAmount);

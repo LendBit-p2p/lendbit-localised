@@ -37,6 +37,12 @@ error CURRENCY_NOT_SUPPORTED(string currency);
 error STALE_PRICE_FEED(address priceFeed);
 error INVALID_PRICE_FEED(address priceFeed);
 
+error YIELD_ALLOCATION_TOO_HIGH(uint16 bps);
+error YIELD_NOT_ENABLED(address token);
+error YIELD_TOKEN_PAUSED(address token);
+error YIELD_NOTHING_TO_CLAIM(uint256 positionId, address token);
+error YIELD_LIQUIDITY_DEFICIT(address token, uint256 deficit);
+
 // chainlink functions error
 error OnlyRouterCanFulfill();
 error UnexpectedRequestID(bytes32 requestId);
