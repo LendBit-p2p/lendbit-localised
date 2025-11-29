@@ -47,26 +47,42 @@ contract TokenVault is ERC4626, ReentrancyGuard {
 
     /// @dev Only diamond modifier
     modifier onlyDiamond() {
-        if (msg.sender != diamond) revert OnlyDiamond();
+        _onlyDiamond();
         _;
+    }
+
+    function _onlyDiamond() internal view {
+        if (msg.sender != diamond) revert OnlyDiamond();
     }
 
     /// @dev Not paused modifier
     modifier notPaused() {
-        if (paused) revert VaultPaused();
+        _notPaused();
         _;
+    }
+
+    function _notPaused() internal view {
+        if (paused) revert VaultPaused();
     }
 
     /// @dev Address zero check modifier
     modifier addressZeroCheck(address _addr) {
-        if (_addr == address(0)) revert InvalidAddressZero();
+        _addressZeroCheck(_addr);
         _;
+    }
+
+    function _addressZeroCheck(address _addr) internal pure {
+        if (_addr == address(0)) revert InvalidAddressZero();
     }
 
     /// @dev Valid amount check modifier
     modifier validAmount(uint256 _amount) {
-        if (_amount == 0) revert InvalidAmount();
+        _validAmount(_amount);
         _;
+    }
+
+    function _validAmount(uint256 _amount) internal pure {
+        if (_amount == 0) revert InvalidAmount();
     }
 
     /**

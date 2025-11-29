@@ -4,7 +4,6 @@ pragma solidity ^0.8.30;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {LibAppStorage} from "./LibAppStorage.sol";
-import {LibDiamond} from "./LibDiamond.sol";
 import {Constants} from "../models/Constant.sol";
 import {VaultConfiguration} from "../models/Protocol.sol";
 import "../models/Error.sol";

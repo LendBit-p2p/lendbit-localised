@@ -13,8 +13,7 @@ import "../contracts/Diamond.sol";
 
 import "../contracts/models/Error.sol";
 import "../contracts/models/Event.sol";
-import {LoanStatus, VaultConfiguration} from "../contracts/models/Protocol.sol";
-import {Base, ERC20Mock} from "./Base.t.sol";
+import {Base} from "./Base.t.sol";
 
 contract ProtocolTest is Base {
     function setUp() public override {
@@ -1240,7 +1239,7 @@ contract ProtocolTest is Base {
         uint256 healthFactor = protocolF.getHealthFactor(positionId, hypotheticalBorrow);
 
         // Expected: ((750k + 300k) * 0.8) / 200k = 4.2
-        uint256 expectedHealthFactor = ((totalCollateralValue * 8000 / 10000) * 1e18) / hypotheticalBorrow;
+        uint256 expectedHealthFactor = (totalCollateralValue * 8000 * 1e18 / 10000) / hypotheticalBorrow;
         assertEq(healthFactor, expectedHealthFactor, "Health factor should be calculated correctly");
     }
 

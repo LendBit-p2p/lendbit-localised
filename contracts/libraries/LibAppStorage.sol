@@ -50,6 +50,8 @@ library LibAppStorage {
         mapping(uint256 => mapping(address => YieldPosition)) s_positionYield; // positionId -> (token -> yield position)
         mapping(address => bool) s_yieldApprovals; // collateral token -> approval flag for Aave pool
 
+        mapping(address => bool) isWhitelisted; // address -> whitelist status
+
         // Chainlink functions variables
         uint32 s_gasLimit;
         uint64 s_subscriptionId;

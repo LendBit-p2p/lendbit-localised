@@ -161,6 +161,7 @@ contract Base is Test, IDiamondCut {
         pricefeed3 = _pricefeed3;
 
         // Setup initial collateral tokens
+        whitelistUserAddresses();
         _setupInitialCollateralTokens();
         protocolF.setInterestRate(2000, 500);
     }
@@ -219,6 +220,13 @@ contract Base is Test, IDiamondCut {
         token4.approve(address(vaultManagerF), _amount);
 
         vaultManagerF.deposit(_token4, _amount);
+    }
+
+    function whitelistUserAddresses() internal {
+        positionManagerF.whitelistAddress(address(this));
+        positionManagerF.whitelistAddress(user1);
+        positionManagerF.whitelistAddress(user2);
+        positionManagerF.whitelistAddress(nonAdmin);
     }
 
     function mkaddr(string memory name) public returns (address) {

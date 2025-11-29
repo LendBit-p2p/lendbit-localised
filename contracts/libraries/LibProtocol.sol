@@ -7,7 +7,6 @@ import {LibAppStorage} from "./LibAppStorage.sol";
 import {LibInterestRateModel} from "./LibInterestRateModel.sol";
 import {LibPositionManager} from "./LibPositionManager.sol";
 import {LibPriceOracle} from "./LibPriceOracle.sol";
-import {LibUtils} from "./LibUtils.sol";
 import {LibVaultManager} from "./LibVaultManager.sol";
 import {LibYieldStrategy} from "./LibYieldStrategy.sol";
 
@@ -220,9 +219,14 @@ library LibProtocol {
     }
 
     function _positionIdCheck(LibAppStorage.StorageLayout storage s) internal view returns (uint256) {
+        _callerWhitelisted(s);
         uint256 _positionId = s._getPositionIdForUser(msg.sender);
         if (_positionId == 0) revert NO_POSITION_ID(msg.sender);
         return _positionId;
+    }
+
+    function _callerWhitelisted(LibAppStorage.StorageLayout storage s) internal view {
+        if (!s.isWhitelisted[msg.sender]) revert ADDRESS_NOT_WHITELISTED(msg.sender);
     }
 
     function _addCollateralToken(

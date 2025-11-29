@@ -29,6 +29,14 @@ contract PositionManagerFacet {
         return _positionId;
     }
 
+    function whitelistAddress(address _user) external onlySecurityCouncil {
+        LibPositionManager._whitelistAddress(LibAppStorage.appStorage(), _user);
+    }
+
+    function blacklistAddress(address _user) external onlySecurityCouncil {
+        LibPositionManager._blacklistAddress(LibAppStorage.appStorage(), _user);
+    }
+
     // Getter functions
 
     function getNextPositionId() external view returns (uint256) {
