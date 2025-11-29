@@ -13,8 +13,7 @@ import "../contracts/Diamond.sol";
 
 import "../contracts/models/Error.sol";
 import "../contracts/models/Event.sol";
-import {LoanStatus, VaultConfiguration} from "../contracts/models/Protocol.sol";
-import {Base, ERC20Mock} from "./Base.t.sol";
+import {Base} from "./Base.t.sol";
 
 contract ProtocolTest is Base {
     function setUp() public override {
@@ -941,8 +940,7 @@ contract ProtocolTest is Base {
         vm.stopPrank();
     }
 
-
-function testRepayLoanSuccess() public {
+    function testRepayLoanSuccess() public {
         createVaultAndFund(1000000e18);
         uint256 collateralAmount = 10000 * 1e18;
         uint256 borrowAmount = 1000 * 1e6;
@@ -1241,7 +1239,7 @@ function testRepayLoanSuccess() public {
         uint256 healthFactor = protocolF.getHealthFactor(positionId, hypotheticalBorrow);
 
         // Expected: ((750k + 300k) * 0.8) / 200k = 4.2
-        uint256 expectedHealthFactor = ((totalCollateralValue * 8000 / 10000) * 1e18) / hypotheticalBorrow;
+        uint256 expectedHealthFactor = (totalCollateralValue * 8000 * 1e18 / 10000) / hypotheticalBorrow;
         assertEq(healthFactor, expectedHealthFactor, "Health factor should be calculated correctly");
     }
 
@@ -1492,5 +1490,58 @@ function testRepayLoanSuccess() public {
 
         uint256 collateralValue = protocolF.getPositionBorrowableCollateralValue(positionId);
         assertEq(collateralValue, expectedValue);
+    }
+
+    function testGetUserActiveLoanIds() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount1 = 1000 * 1e6;
+        uint256 borrowAmount2 = 2000 * 1e6;
+
+        uint256 _positionId = depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 loanId1 = protocolF.takeLoan(address(token4), borrowAmount1, 365 days);
+        uint256 loanId2 = protocolF.takeLoan(address(token4), borrowAmount2, 365 days);
+        vm.stopPrank();
+
+        uint256[] memory activeLoanIds = protocolF.getUserActiveLoanIds(_positionId);
+
+        assertEq(activeLoanIds.length, 2, "User should have 2 active loans");
+        assertEq(activeLoanIds[0], loanId1, "First loan ID should match");
+        assertEq(activeLoanIds[1], loanId2, "Second loan ID should match");
+    }
+
+    function testGetActiveLoanIds() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount1 = 1000 * 1e6;
+        uint256 borrowAmount2 = 2000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+        depositCollateralFor(user2, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 loanId1 = protocolF.takeLoan(address(token4), borrowAmount1, 365 days);
+        uint256 loanId2 = protocolF.takeLoan(address(token4), borrowAmount2, 365 days);
+        token4.approve(address(diamond), borrowAmount1);
+        protocolF.repayLoan(loanId1, borrowAmount1);
+        vm.stopPrank();
+
+        vm.startPrank(user2);
+        uint256 loanId3 = protocolF.takeLoan(address(token4), borrowAmount1, 365 days);
+        uint256 loanId4 = protocolF.takeLoan(address(token4), borrowAmount2, 365 days);
+        uint256 loanId5 = protocolF.takeLoan(address(token4), borrowAmount1, 365 days);
+
+        token4.approve(address(diamond), borrowAmount2);
+        protocolF.repayLoan(loanId4, borrowAmount2);
+        vm.stopPrank();
+
+        uint256[] memory activeLoanIds = protocolF.getActiveLoanIds();
+
+        assertEq(activeLoanIds.length, 3, "should have 3 active loans");
+        assertEq(activeLoanIds[0], loanId2, "First loan ID should match");
+        assertEq(activeLoanIds[1], loanId3, "Second loan ID should match");
+        assertEq(activeLoanIds[2], loanId5, "Third loan ID should match");
     }
 }

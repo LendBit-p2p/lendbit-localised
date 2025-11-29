@@ -8,16 +8,17 @@ import "../models/Protocol.sol";
  * @dev Library for calculating interest rates and utilization in a lending protocol
  */
 library LibInterestRateModel {
-    function calculateSimpleInterest(
-        uint256 principal,
-        uint256 rateBasisPoints,
-        uint256 timeInSeconds
-    ) internal pure returns (uint256) {
+    function calculateSimpleInterest(uint256 principal, uint256 rateBasisPoints, uint256 timeInSeconds)
+        internal
+        pure
+        returns (uint256)
+    {
         // Simple interest formula: Interest = Principal * Rate * Time
         // Rate is in basis points, so we divide by 10,000
         // Time is in seconds, so we divide by the number of seconds in a year (31,536,000)
         return (principal * rateBasisPoints * timeInSeconds) / (10000 * 365 days);
     }
+
     /**
      * @notice Calculates the interest rate based on utilization
      * @param _config The protocol pool configuration

@@ -3,8 +3,9 @@ pragma solidity ^0.8.30;
 
 import {IFunctionsRouter} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/interfaces/IFunctionsRouter.sol";
 import {IFunctionsClient} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/interfaces/IFunctionsClient.sol";
-import {IFunctionsSubscriptions} from
-    "@chainlink/contracts/src/v0.8/functions/v1_0_0/interfaces/IFunctionsSubscriptions.sol";
+import {
+    IFunctionsSubscriptions
+} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/interfaces/IFunctionsSubscriptions.sol";
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
@@ -129,8 +130,8 @@ library LibPriceOracle {
         uint32 callbackGasLimit,
         bytes32 donId
     ) internal returns (bytes32) {
-        bytes32 _requestId =
-            s.i_router.sendRequest(subscriptionId, data, FunctionsRequest.REQUEST_DATA_VERSION, callbackGasLimit, donId);
+        bytes32 _requestId = s.i_router
+            .sendRequest(subscriptionId, data, FunctionsRequest.REQUEST_DATA_VERSION, callbackGasLimit, donId);
         s.s_functionResponse[_requestId] =
             FunctionResponse({requestId: _requestId, responses: "", err: "", priceData: 0, exists: true});
         emit RequestSent(_requestId);
@@ -178,11 +179,12 @@ library LibPriceOracle {
         // Approve the router to spend the specified amount of LINK
         s.i_linkToken.approve(address(s.i_router), _amount);
         // Fund the subscription
-        s.i_linkToken.transferAndCall(
-            address(s.i_router),
-            _amount,
-            abi.encode(s.s_subscriptionId) // Encode the subscription ID in the data field
-        );
+        s.i_linkToken
+            .transferAndCall(
+                address(s.i_router),
+                _amount,
+                abi.encode(s.s_subscriptionId) // Encode the subscription ID in the data field
+            );
     }
 
     function _setSubscriptionId(LibAppStorage.StorageLayout storage s, uint64 _subId) internal {

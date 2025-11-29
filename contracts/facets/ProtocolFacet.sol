@@ -40,11 +40,7 @@ contract ProtocolFacet {
         return s._repay(_token, _amount);
     }
 
-    function takeLoan(
-        address _token,
-        uint256 _principal,
-        uint256 _tenureSeconds
-    ) external returns (uint256) {
+    function takeLoan(address _token, uint256 _principal, uint256 _tenureSeconds) external returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._takeLoan(_token, _principal, _tenureSeconds);
     }
@@ -58,11 +54,6 @@ contract ProtocolFacet {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._repayLoan(loanId, _amount);
     }
-
-    // function borrowCurrency(string calldata _currency, uint256 _amount) external {
-    //     LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-    //     s._borrowCurrency(_currency, _amount);
-    // }
 
     /**
      * @notice Add a token as accepted collateral (only security council)
@@ -196,9 +187,23 @@ contract ProtocolFacet {
         return s._outstandingBalance(_loanId, block.timestamp);
     }
 
+    function getUserActiveLoanIds(uint256 _positionId) external view returns (uint256[] memory) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getUserActiveLoanIds(_positionId);
+    }
+
+    function getActiveLoanIds() external view returns (uint256[] memory) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getActiveLoanIds();
+    }
+
     // Modifiers
     modifier onlySecurityCouncil() {
-        if (msg.sender != LibDiamond.contractOwner()) revert ONLY_SECURITY_COUNCIL();
+        _onlySecurityCouncil();
         _;
+    }
+
+    function _onlySecurityCouncil() internal view {
+        if (msg.sender != LibDiamond.contractOwner()) revert ONLY_SECURITY_COUNCIL();
     }
 }

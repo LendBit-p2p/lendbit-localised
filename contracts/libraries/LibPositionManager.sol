@@ -8,6 +8,7 @@ import "../models/Event.sol";
 
 library LibPositionManager {
     function _createPositionFor(LibAppStorage.StorageLayout storage s, address _user) internal returns (uint256) {
+        _addressIsWhitelisted(s, _user);
         if (_userAddressExists(s, _user)) revert ADDRESS_EXISTS(_user);
         uint256 _positionId = s.s_nextPositionId + 1;
         s.s_nextPositionId += 1;
@@ -24,13 +25,24 @@ library LibPositionManager {
         returns (uint256 _positionId)
     {
         _positionId = _validateUserExists(s, _oldAddress);
+        _addressIsWhitelisted(s, _oldAddress);
+        _addressIsWhitelisted(s, _newAddress);
 
         s.s_ownerPosition[_newAddress] = _positionId;
         s.s_positionOwner[_positionId] = _newAddress;
 
         delete s.s_ownerPosition[_oldAddress];
+        delete s.isWhitelisted[_oldAddress];
 
         emit PositionIdTransferred(_positionId, _oldAddress, _newAddress);
+    }
+
+    function _whitelistAddress(LibAppStorage.StorageLayout storage s, address _user) internal {
+        s.isWhitelisted[_user] = true;
+    }
+
+    function _blacklistAddress(LibAppStorage.StorageLayout storage s, address _user) internal {
+        s.isWhitelisted[_user] = false;
     }
 
     function _userAddressExists(LibAppStorage.StorageLayout storage s, address _user) internal view returns (bool) {
@@ -69,6 +81,12 @@ library LibPositionManager {
         _positionId = _getPositionIdForUser(s, _user);
         if (_positionId == 0) {
             revert NO_POSITION_ID(_user);
+        }
+    }
+
+    function _addressIsWhitelisted(LibAppStorage.StorageLayout storage s, address _user) internal view {
+        if (!s.isWhitelisted[_user]) {
+            revert ADDRESS_NOT_WHITELISTED(_user);
         }
     }
 }

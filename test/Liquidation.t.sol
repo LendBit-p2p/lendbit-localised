@@ -7,6 +7,10 @@ import {PositionLiquidated, Repay, LoanLiquidated, LoanRepayment} from "../contr
 contract LiquidationTest is Base {
     address liquidator = mkaddr("liquidator");
 
+    function setUp() public override {
+        super.setUp();
+    }
+
     function testIsLiquidatable() public {
         createVaultAndFund(100e6); // $250/token = $25,000
         uint256 _positionId = depositCollateralFor(user1, address(token1), 4 ether); // $1,500/token = $6,000
@@ -191,6 +195,7 @@ contract LiquidationTest is Base {
     //                            Loans liquidation tests                        //
     //===========================================================================//
     function testLoanIsLiquidatable() public {
+        positionManagerF.whitelistAddress(user1);
         createVaultAndFund(100e6); // $250/token = $25,000
         uint256 _positionId = depositCollateralFor(user1, address(token1), 4 ether); // $1,500/token = $6,000
 

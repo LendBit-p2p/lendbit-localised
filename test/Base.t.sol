@@ -13,6 +13,7 @@ import "../contracts/facets/PriceOracleFacet.sol";
 import "../contracts/facets/ProtocolFacet.sol";
 import "../contracts/facets/PositionManagerFacet.sol";
 import "../contracts/facets/VaultManagerFacet.sol";
+import "../contracts/facets/YieldStrategyFacet.sol";
 import "../contracts/Diamond.sol";
 
 import {Test} from "forge-std/Test.sol";
@@ -28,6 +29,7 @@ contract Base is Test, IDiamondCut {
     VaultManagerFacet vaultManagerF;
     PriceOracleFacet priceOracleF;
     LiquidationFacet liquidationF;
+    YieldStrategyFacet yieldStrategyF;
 
     // Test tokens
     ERC20Mock token1;
@@ -70,72 +72,74 @@ contract Base is Test, IDiamondCut {
         vaultManagerF = new VaultManagerFacet();
         priceOracleF = new PriceOracleFacet();
         liquidationF = new LiquidationFacet();
+        yieldStrategyF = new YieldStrategyFacet();
 
         //upgrade diamond with facets
         //build cut struct
-        FacetCut[] memory cut = new FacetCut[](7);
+        FacetCut[] memory cut = new FacetCut[](8);
 
-        cut[0] = (
-            FacetCut({
+        cut[0] =
+        (FacetCut({
                 facetAddress: address(dLoupe),
                 action: FacetCutAction.Add,
                 functionSelectors: generateSelectors("DiamondLoupeFacet")
-            })
-        );
+            }));
 
-        cut[1] = (
-            FacetCut({
+        cut[1] =
+        (FacetCut({
                 facetAddress: address(ownerF),
                 action: FacetCutAction.Add,
                 functionSelectors: generateSelectors("OwnershipFacet")
-            })
-        );
+            }));
 
-        cut[2] = (
-            FacetCut({
+        cut[2] =
+        (FacetCut({
                 facetAddress: address(protocolF),
                 action: FacetCutAction.Add,
                 functionSelectors: generateSelectors("ProtocolFacet")
-            })
-        );
+            }));
 
-        cut[3] = (
-            FacetCut({
+        cut[3] =
+        (FacetCut({
                 facetAddress: address(positionManagerF),
                 action: FacetCutAction.Add,
                 functionSelectors: generateSelectors("PositionManagerFacet")
-            })
-        );
+            }));
 
-        cut[4] = (
-            FacetCut({
+        cut[4] =
+        (FacetCut({
                 facetAddress: address(vaultManagerF),
                 action: FacetCutAction.Add,
                 functionSelectors: generateSelectors("VaultManagerFacet")
-            })
-        );
+            }));
 
-        cut[5] = (
-            FacetCut({
+        cut[5] =
+        (FacetCut({
                 facetAddress: address(priceOracleF),
                 action: FacetCutAction.Add,
                 functionSelectors: generateSelectors("PriceOracleFacet")
-            })
-        );
+            }));
 
-        cut[6] = (
-            FacetCut({
+        cut[6] =
+        (FacetCut({
                 facetAddress: address(liquidationF),
                 action: FacetCutAction.Add,
                 functionSelectors: generateSelectors("LiquidationFacet")
-            })
-        );
+            }));
+
+        cut[7] =
+        (FacetCut({
+                facetAddress: address(yieldStrategyF),
+                action: FacetCutAction.Add,
+                functionSelectors: generateSelectors("YieldStrategyFacet")
+            }));
 
         protocolF = ProtocolFacet(address(diamond));
         positionManagerF = PositionManagerFacet(address(diamond));
         vaultManagerF = VaultManagerFacet(address(diamond));
         priceOracleF = PriceOracleFacet(address(diamond));
         liquidationF = LiquidationFacet(address(diamond));
+        yieldStrategyF = YieldStrategyFacet(address(diamond));
 
         //upgrade diamond
         IDiamondCut(address(diamond)).diamondCut(cut, address(0x0), "");
@@ -157,6 +161,7 @@ contract Base is Test, IDiamondCut {
         pricefeed3 = _pricefeed3;
 
         // Setup initial collateral tokens
+        whitelistUserAddresses();
         _setupInitialCollateralTokens();
         protocolF.setInterestRate(2000, 500);
     }
@@ -215,6 +220,13 @@ contract Base is Test, IDiamondCut {
         token4.approve(address(vaultManagerF), _amount);
 
         vaultManagerF.deposit(_token4, _amount);
+    }
+
+    function whitelistUserAddresses() internal {
+        positionManagerF.whitelistAddress(address(this));
+        positionManagerF.whitelistAddress(user1);
+        positionManagerF.whitelistAddress(user2);
+        positionManagerF.whitelistAddress(nonAdmin);
     }
 
     function mkaddr(string memory name) public returns (address) {

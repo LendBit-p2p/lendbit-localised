@@ -14,7 +14,17 @@ import "../contracts/models/Error.sol";
 import "../contracts/models/Event.sol";
 
 contract PositionManagerTest is Base {
+    function setUp() public override {
+        super.setUp();
+        positionManagerF.whitelistAddress(address(0xa));
+        positionManagerF.whitelistAddress(address(0xb));
+        positionManagerF.whitelistAddress(address(0xdead));
+        positionManagerF.whitelistAddress(address(0xacc));
+    }
+
     function testCreatePositionFor() public {
+        positionManagerF.whitelistAddress(address(0xa));
+        positionManagerF.whitelistAddress(address(0xb));
         uint256 _positionIdA = positionManagerF.createPositionFor(address(0xa));
         uint256 _positionIdB = positionManagerF.createPositionFor(address(0xb));
         assertEq(_positionIdA, 1);
@@ -100,6 +110,7 @@ contract PositionManagerTest is Base {
     // Getters Tests
     function testGetNextPositionId() public {
         for (uint160 i = 1; i < 10; i++) {
+            positionManagerF.whitelistAddress(address(i));
             positionManagerF.createPositionFor(address(i));
         }
 
@@ -109,6 +120,7 @@ contract PositionManagerTest is Base {
 
     function testGetPositionIdForUser() public {
         for (uint160 i = 1; i < 10; i++) {
+            positionManagerF.whitelistAddress(address(i));
             positionManagerF.createPositionFor(address(i));
         }
 
@@ -123,6 +135,7 @@ contract PositionManagerTest is Base {
 
     function testGetUserForPositionId() public {
         for (uint160 i = 1; i < 10; i++) {
+            positionManagerF.whitelistAddress(address(i));
             positionManagerF.createPositionFor(address(i));
         }
 
@@ -133,5 +146,22 @@ contract PositionManagerTest is Base {
         assertTrue(_user3 == address(3));
         assertTrue(_user5 == address(5));
         assertTrue(_user10 == address(0));
+    }
+
+    function testWhitelistAndBlacklistAddress() public {
+        address _user = address(0x123);
+
+        vm.expectRevert(abi.encodeWithSelector(ADDRESS_NOT_WHITELISTED.selector, _user));
+        positionManagerF.createPositionFor(_user);
+
+        positionManagerF.whitelistAddress(_user);
+        uint256 _positionId = positionManagerF.createPositionFor(_user);
+        assertEq(_positionId, 1);
+
+        positionManagerF.blacklistAddress(_user);
+        vm.startPrank(_user);
+        vm.expectRevert(abi.encodeWithSelector(ADDRESS_NOT_WHITELISTED.selector, _user));
+        positionManagerF.transferPositionOwnership(address(0x456));
+        vm.stopPrank();
     }
 }

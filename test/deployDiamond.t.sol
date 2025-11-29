@@ -27,21 +27,19 @@ contract DiamondDeployer is Test, IDiamondCut {
         //build cut struct
         FacetCut[] memory cut = new FacetCut[](2);
 
-        cut[0] = (
-            FacetCut({
+        cut[0] =
+        (FacetCut({
                 facetAddress: address(dLoupe),
                 action: FacetCutAction.Add,
                 functionSelectors: generateSelectors("DiamondLoupeFacet")
-            })
-        );
+            }));
 
-        cut[1] = (
-            FacetCut({
+        cut[1] =
+        (FacetCut({
                 facetAddress: address(ownerF),
                 action: FacetCutAction.Add,
                 functionSelectors: generateSelectors("OwnershipFacet")
-            })
-        );
+            }));
 
         //upgrade diamond
         IDiamondCut(address(diamond)).diamondCut(cut, address(0x0), "");
@@ -50,9 +48,7 @@ contract DiamondDeployer is Test, IDiamondCut {
         DiamondLoupeFacet(address(diamond)).facetAddresses();
     }
 
-    function generateSelectors(
-        string memory _facetName
-    ) internal returns (bytes4[] memory selectors) {
+    function generateSelectors(string memory _facetName) internal returns (bytes4[] memory selectors) {
         string[] memory cmd = new string[](3);
         cmd[0] = "node";
         cmd[1] = "scripts/genSelectors.js";
@@ -61,9 +57,5 @@ contract DiamondDeployer is Test, IDiamondCut {
         selectors = abi.decode(res, (bytes4[]));
     }
 
-    function diamondCut(
-        FacetCut[] calldata _diamondCut,
-        address _init,
-        bytes calldata _calldata
-    ) external override {}
+    function diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata) external override {}
 }

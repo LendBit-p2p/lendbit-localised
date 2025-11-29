@@ -8,7 +8,6 @@ import {LibProtocol} from "../contracts/libraries/LibProtocol.sol";
 
 import {Loan, LoanStatus} from "../contracts/models/Protocol.sol";
 
-
 contract ProtocolLibTest is Base {
     function setUp() public override {
         super.setUp();
@@ -41,13 +40,13 @@ contract ProtocolLibTest is Base {
             status: LoanStatus.FULFILLED
         });
 
-        uint256 outstanding = LibProtocol._outstandingBalance(_loan, block.timestamp+365 days);
+        uint256 outstanding = LibProtocol._outstandingBalance(_loan, block.timestamp + 365 days);
 
         // Expected outstanding balance: (2000 + 20% interest p.a) - 500 = 1900 ether
         assertEq(outstanding, 1900 ether);
     }
 
-        function testOutstandingBalanceWithPenalty() public view {
+    function testOutstandingBalanceWithPenalty() public view {
         uint256 principal = 2000 ether;
         uint256 repaid = 0;
 
@@ -63,7 +62,7 @@ contract ProtocolLibTest is Base {
             status: LoanStatus.FULFILLED
         });
 
-        uint256 outstanding = LibProtocol._outstandingBalance(_loan, block.timestamp+(2*365 days));
+        uint256 outstanding = LibProtocol._outstandingBalance(_loan, block.timestamp + (2 * 365 days));
 
         // Expected outstanding balance: 2000 + 20% interest p.a + 5% penalty p.a after penalty = 2900 ether
         assertEq(outstanding, 2900 ether);
