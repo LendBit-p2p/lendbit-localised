@@ -55,11 +55,6 @@ contract ProtocolFacet {
         return s._repayLoan(loanId, _amount);
     }
 
-    // function borrowCurrency(string calldata _currency, uint256 _amount) external {
-    //     LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-    //     s._borrowCurrency(_currency, _amount);
-    // }
-
     /**
      * @notice Add a token as accepted collateral (only security council)
      * @param _token The token address to add as collateral
@@ -190,6 +185,16 @@ contract ProtocolFacet {
     function getOutstandingDebtForLoan(uint256 _loanId) external view returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._outstandingBalance(_loanId, block.timestamp);
+    }
+
+    function getUserActiveLoanIds(uint256 _positionId) external view returns (uint256[] memory) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getUserActiveLoanIds(_positionId);
+    }
+
+    function getActiveLoanIds() external view returns (uint256[] memory) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getActiveLoanIds();
     }
 
     // Modifiers

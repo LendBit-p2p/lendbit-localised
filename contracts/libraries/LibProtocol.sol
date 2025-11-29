@@ -516,4 +516,35 @@ library LibProtocol {
             if (msg.value != _amount) revert AMOUNT_MISMATCH(msg.value, _amount);
         }
     }
+
+    function _getUserActiveLoanIds(LibAppStorage.StorageLayout storage s, uint256 _positionId)
+        internal
+        view
+        returns (uint256[] memory)
+    {
+        return s.s_positionActiveLoanIds[_positionId];
+    }
+
+    function _getActiveLoanIds(LibAppStorage.StorageLayout storage s) internal view returns (uint256[] memory) {
+        uint256 totalLoans = s.s_nextLoanId;
+        uint256 count = 0;
+
+        for (uint256 i = 1; i <= totalLoans; i++) {
+            if (s.s_loans[i].status == LoanStatus.FULFILLED) {
+                count++;
+            }
+        }
+
+        uint256[] memory activeLoanIds = new uint256[](count);
+        uint256 index = 0;
+
+        for (uint256 i = 1; i <= totalLoans; i++) {
+            if (s.s_loans[i].status == LoanStatus.FULFILLED) {
+                activeLoanIds[index] = i;
+                index++;
+            }
+        }
+
+        return activeLoanIds;
+    }
 }
