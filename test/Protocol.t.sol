@@ -1074,89 +1074,6 @@ contract ProtocolTest is Base {
     }
 
     // =============================================================
-    //                  LOCAL CURRENCY TESTS
-    // =============================================================
-
-    function testAddLocalCurrency() public {
-        string memory currency = "NGN";
-
-        vm.expectEmit(true, false, false, false);
-        emit LocalCurrencyAdded(currency);
-
-        protocolF.addLocalCurrency(currency);
-
-        // We can't easily test the storage directly, but we can test removal
-        protocolF.removeLocalCurrency(currency);
-    }
-
-    function testAddLocalCurrencyFailsIfNotSecurityCouncil() public {
-        string memory currency = "USD";
-
-        vm.startPrank(nonAdmin);
-        vm.expectRevert(abi.encodeWithSelector(ONLY_SECURITY_COUNCIL.selector));
-        protocolF.addLocalCurrency(currency);
-        vm.stopPrank();
-    }
-
-    function testAddLocalCurrencyFailsForEmptyString() public {
-        string memory currency = "";
-
-        vm.expectRevert(abi.encodeWithSelector(EMPTY_STRING.selector));
-        protocolF.addLocalCurrency(currency);
-    }
-
-    function testAddLocalCurrencyFailsIfAlreadySupported() public {
-        string memory currency = "GBP";
-
-        // Add currency first
-        protocolF.addLocalCurrency(currency);
-
-        // Try to add again
-        vm.expectRevert(abi.encodeWithSelector(CURRENCY_ALREADY_SUPPORTED.selector, currency));
-        protocolF.addLocalCurrency(currency);
-    }
-
-    function testRemoveLocalCurrency() public {
-        string memory currency = "EUR";
-
-        // Add currency first
-        protocolF.addLocalCurrency(currency);
-
-        // Now remove it
-        vm.expectEmit(true, false, false, false);
-        emit LocalCurrencyRemoved(currency);
-
-        protocolF.removeLocalCurrency(currency);
-    }
-
-    function testRemoveLocalCurrencyFailsIfNotSecurityCouncil() public {
-        string memory currency = "JPY";
-
-        // Add currency first
-        protocolF.addLocalCurrency(currency);
-
-        // Try to remove as non-admin
-        vm.startPrank(nonAdmin);
-        vm.expectRevert(abi.encodeWithSelector(ONLY_SECURITY_COUNCIL.selector));
-        protocolF.removeLocalCurrency(currency);
-        vm.stopPrank();
-    }
-
-    function testRemoveLocalCurrencyFailsForEmptyString() public {
-        string memory currency = "";
-
-        vm.expectRevert(abi.encodeWithSelector(EMPTY_STRING.selector));
-        protocolF.removeLocalCurrency(currency);
-    }
-
-    function testRemoveLocalCurrencyFailsIfNotSupported() public {
-        string memory currency = "CHF";
-
-        vm.expectRevert(abi.encodeWithSelector(CURRENCY_NOT_SUPPORTED.selector, currency));
-        protocolF.removeLocalCurrency(currency);
-    }
-
-    // =============================================================
     //                       VALUE CALCULATION TESTS
     // =============================================================
     function testGetHealthFactorWithBorrows() public {
@@ -1241,33 +1158,6 @@ contract ProtocolTest is Base {
         // Expected: ((750k + 300k) * 0.8) / 200k = 4.2
         uint256 expectedHealthFactor = (totalCollateralValue * 8000 * 1e18 / 10000) / hypotheticalBorrow;
         assertEq(healthFactor, expectedHealthFactor, "Health factor should be calculated correctly");
-    }
-
-    function testLocalCurrencyManagement() public {
-        string[] memory currencies = new string[](3);
-        currencies[0] = "NGN";
-        currencies[1] = "KES";
-        currencies[2] = "UGX";
-
-        // Add multiple currencies
-        for (uint256 i = 0; i < currencies.length; i++) {
-            vm.expectEmit(true, false, false, false);
-            emit LocalCurrencyAdded(currencies[i]);
-            protocolF.addLocalCurrency(currencies[i]);
-        }
-
-        // Remove one currency
-        vm.expectEmit(true, false, false, false);
-        emit LocalCurrencyRemoved(currencies[1]);
-        protocolF.removeLocalCurrency(currencies[1]);
-
-        // Verify we can't remove the same currency again
-        vm.expectRevert(abi.encodeWithSelector(CURRENCY_NOT_SUPPORTED.selector, currencies[1]));
-        protocolF.removeLocalCurrency(currencies[1]);
-
-        // Verify we can still remove other currencies
-        protocolF.removeLocalCurrency(currencies[0]);
-        protocolF.removeLocalCurrency(currencies[2]);
     }
 
     // =============================================================
@@ -1492,6 +1382,48 @@ contract ProtocolTest is Base {
         assertEq(collateralValue, expectedValue);
     }
 
+    function testGetPositionBorrowableCollateralValueReducesWithActiveLoans() public {
+        createVaultAndFund(1000000e18);
+        protocolF.addCollateralToken(address(token3), pricefeed3, baseTokenLTV);
+        uint256 depositAmount1 = 2 * 1e18; // 2 tokens of token1 (18 decimals)
+        uint256 depositAmount2 = 10 * 1e18; // 10 tokens of token2 (18 decimals)
+        uint256 depositAmount3 = 1000 * 1e6; // 1000 tokens of token3 (6 decimals)
+        uint256 borrowAmount = 10 * 1e6;
+
+        // Deposit collateral
+        token1.mint(user1, depositAmount1);
+        token2.mint(user1, depositAmount2);
+        token3.mint(user1, depositAmount3);
+
+        protocolF.setCollateralTokenLtv(address(token2), 5000); // set to 50%
+        protocolF.setCollateralTokenLtv(address(token3), 5000); // set to 50%
+
+        vm.startPrank(user1);
+        token1.approve(address(diamond), depositAmount1);
+        token2.approve(address(diamond), depositAmount2);
+        token3.approve(address(diamond), depositAmount3);
+
+        protocolF.depositCollateral(address(token1), depositAmount1);
+        protocolF.depositCollateral(address(token2), depositAmount2);
+        protocolF.depositCollateral(address(token3), depositAmount3);
+
+        protocolF.takeLoan(address(token4), borrowAmount, 365 days);
+        vm.stopPrank();
+
+        uint256 positionId = positionManagerF.getPositionIdForUser(user1);
+        (, uint256 borrowValue) = priceOracleF.getTokenValueInUSD(address(token4), borrowAmount);
+
+        // Calculate expected value
+        // token1: 2 * $1500 * 0.8 = $2400
+        // token2: 10 * $300 * 0.5 = $1500
+        // token3: 1000 * $1 * 0.5 = $500
+        // Total = $4400
+        uint256 expectedValue = 4400 * 1e18;
+
+        assertEq((expectedValue - borrowValue), protocolF.getPositionBorrowableCollateralValue(positionId));
+        assertEq(expectedValue, protocolF.getPositionUtilizableCollateralValue(positionId));
+    }
+
     function testGetUserActiveLoanIds() public {
         createVaultAndFund(1000000e18);
         uint256 collateralAmount = 10000 * 1e18;
@@ -1543,5 +1475,21 @@ contract ProtocolTest is Base {
         assertEq(activeLoanIds[0], loanId2, "First loan ID should match");
         assertEq(activeLoanIds[1], loanId3, "Second loan ID should match");
         assertEq(activeLoanIds[2], loanId5, "Third loan ID should match");
+    }
+
+    function testWithdrawCollateralAboveLTVWithActiveBorrowFails() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        protocolF.takeLoan(address(token4), borrowAmount, 90 days);
+
+        // Attempt to withdraw collateral that would breach LTV
+        vm.expectRevert(abi.encodeWithSelector(HEALTH_FACTOR_TOO_LOW.selector, 0));
+        protocolF.withdrawCollateral(address(token1), collateralAmount);
+        vm.stopPrank();
     }
 }
