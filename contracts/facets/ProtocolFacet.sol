@@ -84,24 +84,6 @@ contract ProtocolFacet {
     }
 
     /**
-     * @notice Add a local currency to supported list (only security council)
-     * @param _currency The currency string to add (e.g., "NGN", "UGX", "KES", etc.)
-     */
-    function addLocalCurrency(string calldata _currency) external onlySecurityCouncil {
-        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        s._addLocalCurrencySupport(_currency);
-    }
-
-    /**
-     * @notice Remove a local currency from supported list (only security council)
-     * @param _currency The currency string to remove
-     */
-    function removeLocalCurrency(string calldata _currency) external onlySecurityCouncil {
-        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
-        s._removeLocalCurrencySupport(_currency);
-    }
-
-    /**
      * @notice Check if a token is supported as collateral
      * @param _token The token address to check
      * @return bool True if token is supported as collateral
@@ -137,13 +119,18 @@ contract ProtocolFacet {
     }
 
     /**
-     * @notice Get borrowable collateral value for a position based on the LTV of each collateral token
+     * @notice Get borrowable collateral value for a position based on the LTV of each collateral token and total debt
      * @param _positionId The position ID
      * @return uint256 The borrowable collateral value in USD
      */
     function getPositionBorrowableCollateralValue(uint256 _positionId) external view returns (uint256) {
         LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
         return s._getPositionBorrowableCollateralValue(_positionId);
+    }
+
+    function getPositionUtilizableCollateralValue(uint256 _positionId) external view returns (uint256) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getPositionUtilizableCollateralValue(_positionId);
     }
 
     function getPositionBorrowedValue(uint256 _positionId) external view returns (uint256) {

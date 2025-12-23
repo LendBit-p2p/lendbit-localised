@@ -23,7 +23,6 @@ library LibAppStorage {
 
         // borrowable token related storage
         address[] s_allSupportedTokens;
-        mapping(string => bool) s_supportedLocalCurrencies;
         mapping(address => bool) s_supportedToken;
         mapping(string => address) s_localCurrencyToToken; // currency string -> token address
         mapping(address => address) s_tokenPriceFeed; // token address -> price feed address

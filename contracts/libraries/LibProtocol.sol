@@ -51,8 +51,8 @@ library LibProtocol {
         s.s_positionCollateral[_positionId][_token] -= _amount;
         uint256 _healthFactor = _getHealthFactor(s, _positionId, 0);
 
-        uint256 _borrowValue = _getPositionBorrowedValue(s, _positionId);
-        if (_borrowValue > 0) {
+        uint256 _debtValue = _getPositionBorrowedValue(s, _positionId) + _totalActiveDebt(s, _positionId);
+        if (_debtValue > 0) {
             if (_healthFactor < Constants.MIN_HEALTH_FACTOR) revert HEALTH_FACTOR_TOO_LOW(_healthFactor);
         }
 
@@ -310,24 +310,6 @@ library LibProtocol {
         }
     }
 
-    function _addLocalCurrencySupport(LibAppStorage.StorageLayout storage s, string calldata _currency) internal {
-        if (keccak256(abi.encode(_currency)) == keccak256(abi.encode(""))) revert EMPTY_STRING();
-        if (s.s_supportedLocalCurrencies[_currency]) revert CURRENCY_ALREADY_SUPPORTED(_currency);
-
-        s.s_supportedLocalCurrencies[_currency] = true;
-
-        emit LocalCurrencyAdded(_currency);
-    }
-
-    function _removeLocalCurrencySupport(LibAppStorage.StorageLayout storage s, string calldata _currency) internal {
-        if (keccak256(abi.encode(_currency)) == keccak256(abi.encode(""))) revert EMPTY_STRING();
-        if (!s.s_supportedLocalCurrencies[_currency]) revert CURRENCY_NOT_SUPPORTED(_currency);
-
-        s.s_supportedLocalCurrencies[_currency] = false;
-
-        emit LocalCurrencyRemoved(_currency);
-    }
-
     function _getPositionCollateralValue(LibAppStorage.StorageLayout storage s, uint256 _positionId)
         internal
         view
@@ -337,8 +319,7 @@ library LibProtocol {
         address[] memory _tokens = s.s_allCollateralTokens;
         for (uint256 i = 0; i < _tokens.length; i++) {
             address _token = _tokens[i];
-            uint256 _amount = s.s_positionCollateral[_positionId][_token];
-            (, uint256 _usdValue) = s._getTokenValueInUSD(_token, _amount);
+            uint256 _usdValue = _getPositionCollateralTokenValue(s, _positionId, _token);
             _totalValue += _usdValue;
         }
         return _totalValue;
@@ -349,13 +330,23 @@ library LibProtocol {
         view
         returns (uint256)
     {
+        uint256 _totalValue = _getPositionUtilizableCollateralValue(s, _positionId);
+        uint256 remainingCollateral =
+            _totalValue - _getPositionBorrowedValue(s, _positionId) - _totalActiveDebt(s, _positionId);
+        return remainingCollateral;
+    }
+
+    function _getPositionUtilizableCollateralValue(LibAppStorage.StorageLayout storage s, uint256 _positionId)
+        internal
+        view
+        returns (uint256)
+    {
         uint256 _totalValue = 0;
         address[] memory _tokens = s.s_allCollateralTokens;
         for (uint256 i = 0; i < _tokens.length; i++) {
             address _token = _tokens[i];
             uint16 _ltv = s.s_collateralTokenLTV[_token];
-            uint256 _amount = s.s_positionCollateral[_positionId][_token];
-            (, uint256 _usdValue) = s._getTokenValueInUSD(_token, _amount);
+            uint256 _usdValue = _getPositionCollateralTokenValue(s, _positionId, _token);
             _totalValue += (_usdValue * _ltv) / Constants.BASIS_POINTS_SCALE;
         }
         return _totalValue;
@@ -392,7 +383,7 @@ library LibProtocol {
     //     view
     //     returns (uint256)
     // {
-    //     uint256 _collateralValue = _getPositionBorrowableCollateralValue(s, _positionId);
+    //     uint256 _collateralValue = _getPositionUtilizableCollateralValue(s, _positionId);
     //     uint256 _borrowedValue = _getPositionBorrowedValue(s, _positionId);
 
     //     _borrowedValue += _currentBorrowValue;
@@ -407,7 +398,7 @@ library LibProtocol {
         view
         returns (uint256)
     {
-        uint256 _collateralValue = _getPositionBorrowableCollateralValue(s, _positionId);
+        uint256 _collateralValue = _getPositionUtilizableCollateralValue(s, _positionId);
         uint256 _borrowedValue = _totalActiveDebt(s, _positionId) + _getPositionBorrowedValue(s, _positionId);
 
         _borrowedValue += _currentBorrowValue;
