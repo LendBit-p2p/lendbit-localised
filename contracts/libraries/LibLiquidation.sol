@@ -61,7 +61,7 @@ library LibLiquidation {
 
         LibProtocol._transferToken(_collateralToken, msg.sender, _amountToLiquidate);
 
-        emit LoanLiquidated(_loan.positionId, msg.sender, _collateralToken, _amountToLiquidate);
+        emit LoanLiquidated(_loan.positionId, _loanId, _collateralToken, msg.sender, _amountToLiquidate);
         emit LoanRepayment(_loan.positionId, _loanId, _loan.token, _amount);
     }
 

@@ -184,6 +184,26 @@ contract ProtocolFacet {
         return s._getActiveLoanIds();
     }
 
+    function getLoanDetails(uint256 _loanId)
+        external
+        view
+        returns (
+            uint256 positionId,
+            address token,
+            uint256 principal,
+            uint256 repaid,
+            uint256 tenureSeconds,
+            uint256 startTimestamp,
+            uint256 debt,
+            uint16 annualRateBps,
+            uint16 penaltyRateBps,
+            uint8 status
+        )
+    {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s._getLoanDetails(_loanId);
+    }
+
     // Modifiers
     modifier onlySecurityCouncil() {
         _onlySecurityCouncil();

@@ -97,7 +97,7 @@ library LibProtocol {
         TokenVault _vault = s.i_tokenVault[_loan.token];
         _vault.borrow(msg.sender, _loan.principal);
 
-        emit LoanTaken(_positionId, _loan.token, _loan.principal, _loan.tenureSeconds, _loan.annualRateBps);
+        emit LoanTaken(_positionId, _loanId, _loan.token, _loan.principal, _loan.tenureSeconds, _loan.annualRateBps);
         return _loanId;
     }
 
@@ -537,5 +537,36 @@ library LibProtocol {
         }
 
         return activeLoanIds;
+    }
+
+    function _getLoanDetails(LibAppStorage.StorageLayout storage s, uint256 _loanId)
+        internal
+        view
+        returns (
+            uint256 positionId,
+            address token,
+            uint256 principal,
+            uint256 repaid,
+            uint256 tenureSeconds,
+            uint256 startTimestamp,
+            uint256 debt,
+            uint16 annualRateBps,
+            uint16 penaltyRateBps,
+            uint8 status
+        )
+    {
+        Loan memory loan = s.s_loans[_loanId];
+        return (
+            loan.positionId,
+            loan.token,
+            loan.principal,
+            loan.repaid,
+            loan.tenureSeconds,
+            loan.startTimestamp,
+            _outstandingBalance(loan, block.timestamp),
+            loan.annualRateBps,
+            loan.penaltyRateBps,
+            uint8(loan.status)
+        );
     }
 }

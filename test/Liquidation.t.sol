@@ -238,7 +238,7 @@ contract LiquidationTest is Base {
         token4.approve(address(liquidationF), _borrowAmount);
 
         vm.expectEmit(true, true, true, false);
-        emit LoanLiquidated(_positionId, liquidator, address(token1), 0);
+        emit LoanLiquidated(_positionId, _loanId, address(token1), liquidator, 0);
         vm.expectEmit(true, true, false, false);
         emit LoanRepayment(_positionId, _loanId, address(token4), 0);
         liquidationF.liquidateLoan(_loanId, _borrowAmount, address(token1));
@@ -270,7 +270,7 @@ contract LiquidationTest is Base {
         token4.approve(address(liquidationF), _borrowAmount);
 
         vm.expectEmit(true, true, true, false);
-        emit LoanLiquidated(_positionId, liquidator, address(1), 0);
+        emit LoanLiquidated(_positionId, _loanId, address(1), liquidator, 0);
         vm.expectEmit(true, true, false, false);
         emit LoanRepayment(_positionId, _loanId, address(token4), 0);
         liquidationF.liquidateLoan(_loanId, _borrowAmount, address(1));

@@ -34,14 +34,25 @@ event PositionLiquidated(
 // Loan Events
 event InterestRateUpdated(uint16 newInterestRate, uint16 newPenaltyRate);
 event LoanTaken(
-    uint256 indexed positionId, address indexed token, uint256 principal, uint256 tenureSeconds, uint16 annualRateBps
+    uint256 indexed positionId,
+    uint256 indexed loanId,
+    address indexed token,
+    uint256 principal,
+    uint256 tenureSeconds,
+    uint16 annualRateBps
 );
 event LoanRepayment(uint256 indexed positionId, uint256 indexed loanId, address indexed token, uint256 amount);
 event LoanLiquidated(
-    uint256 indexed positionId, address indexed liquidator, address indexed token, uint256 amountLiquidated
+    uint256 indexed positionId,
+    uint256 indexed loandId,
+    address indexed token,
+    address liquidator,
+    uint256 amountLiquidated
 );
 
-event YieldTokenConfigured(address indexed token, address indexed pool, address indexed aToken, uint16 allocationBps, uint16 protocolShareBps);
+event YieldTokenConfigured(
+    address indexed token, address indexed pool, address indexed aToken, uint16 allocationBps, uint16 protocolShareBps
+);
 event YieldTokenPaused(address indexed token, bool paused);
 event YieldAllocated(uint256 indexed positionId, address indexed token, uint256 amount);
 event YieldReleased(uint256 indexed positionId, address indexed token, uint256 amount);

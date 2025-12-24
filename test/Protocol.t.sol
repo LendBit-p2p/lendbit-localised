@@ -11,6 +11,7 @@ import "../contracts/facets/PositionManagerFacet.sol";
 import "../contracts/facets/VaultManagerFacet.sol";
 import "../contracts/Diamond.sol";
 
+import "../contracts/models/Protocol.sol";
 import "../contracts/models/Error.sol";
 import "../contracts/models/Event.sol";
 import {Base} from "./Base.t.sol";
@@ -1475,6 +1476,50 @@ contract ProtocolTest is Base {
         assertEq(activeLoanIds[0], loanId2, "First loan ID should match");
         assertEq(activeLoanIds[1], loanId3, "Second loan ID should match");
         assertEq(activeLoanIds[2], loanId5, "Third loan ID should match");
+    }
+
+    function testGetLoanDetails() public {
+        createVaultAndFund(1000000e18);
+        uint256 collateralAmount = 10000 * 1e18;
+        uint256 borrowAmount = 1000 * 1e6;
+        uint256 tenure = 365 days;
+
+        depositCollateralFor(user1, address(token1), collateralAmount);
+
+        vm.startPrank(user1);
+        uint256 loanId = protocolF.takeLoan(address(token4), borrowAmount, tenure);
+        token4.approve(address(diamond), borrowAmount / 2);
+        protocolF.repayLoan(loanId, borrowAmount / 2);
+        vm.stopPrank();
+        vm.warp(block.timestamp + 365 days);
+
+        (
+            uint256 positionId,
+            address token,
+            uint256 principal,
+            uint256 repaid,
+            uint256 tenureSeconds,
+            uint256 startTimestamp,
+            uint256 debt,
+            uint16 annualRateBps,
+            uint16 penaltyRateBps,
+            uint8 status
+        ) = protocolF.getLoanDetails(loanId);
+
+        assertEq(positionId, 2, "Position ID should match");
+        assertEq(token, address(token4), "Loan token address should match");
+        assertEq(principal, borrowAmount, "Principal amount should match");
+        assertEq(
+            debt,
+            (borrowAmount * 20 / 100) + (borrowAmount / 2),
+            "debt amount should have increased by 20% of principal"
+        );
+        assertEq(repaid, borrowAmount / 2, "Repaid amount should match");
+        assertEq(startTimestamp, (block.timestamp - 365 days), "Start time should match");
+        assertEq(tenureSeconds, tenure, "End time should match");
+        assertEq(annualRateBps, 2000, "Interest rate should match");
+        assertEq(penaltyRateBps, 500, "Penalty rate should match");
+        assertEq(status, uint8(LoanStatus.FULFILLED), "Loan should not be marked as repaid");
     }
 
     function testWithdrawCollateralAboveLTVWithActiveBorrowFails() public {
