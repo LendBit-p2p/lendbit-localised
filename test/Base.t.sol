@@ -166,7 +166,7 @@ contract Base is Test, IDiamondCut {
         protocolF.setInterestRate(2000, 500);
     }
 
-    function _setupInitialCollateralTokens() internal {
+    function _setupInitialCollateralTokens() internal virtual {
         protocolF.addCollateralToken(address(token1), pricefeed1, baseTokenLTV);
         protocolF.addCollateralToken(address(token2), pricefeed2, baseTokenLTV);
         protocolF.addCollateralToken(address(1), pricefeed1, baseTokenLTV); // Native token
@@ -185,6 +185,7 @@ contract Base is Test, IDiamondCut {
 
     function depositCollateralFor(address _user, address _token, uint256 _amount)
         internal
+        virtual
         returns (uint256 positionId)
     {
         if (_token == address(1)) {
