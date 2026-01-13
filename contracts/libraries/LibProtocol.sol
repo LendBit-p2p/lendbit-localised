@@ -2,6 +2,8 @@
 pragma solidity ^0.8.30;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 import {LibAppStorage} from "./LibAppStorage.sol";
 import {LibInterestRateModel} from "./LibInterestRateModel.sol";
@@ -99,6 +101,91 @@ library LibProtocol {
 
         emit LoanTaken(_positionId, _loanId, _loan.token, _loan.principal, _loan.tenureSeconds, _loan.annualRateBps);
         return _loanId;
+    }
+
+    function _requestBorrow(
+        LibAppStorage.StorageLayout storage s,
+        BorrowRequest calldata _request,
+        bytes calldata _signature
+    ) internal returns (uint256) {
+        if (bytes(_request.action).length == 0) revert EMPTY_STRING();
+        if (_request.wallet == address(0) || _request.contractAddress == address(0)) revert ADDRESS_ZERO();
+        if (_request.amount == 0) revert AMOUNT_ZERO();
+        if (!s.s_supportedToken[_request.token]) revert TOKEN_NOT_SUPPORTED(_request.token);
+
+        uint256 _storedPositionId = s._getPositionIdForUser(_request.wallet);
+        if (_storedPositionId == 0) revert NO_POSITION_ID(_request.wallet);
+
+        if (_request.targetChainId != block.chainid) {
+            revert REQUEST_BORROW_TARGET_CHAIN_MISMATCH(block.chainid, _request.targetChainId);
+        }
+        if (_request.contractAddress != address(this)) {
+            revert REQUEST_BORROW_CONTRACT_MISMATCH(address(this), _request.contractAddress);
+        }
+
+        _verifyBorrowSignature(s, _request, _signature);
+
+        if (s.s_requestBorrowNonceUsed[_request.contractAddress][_request.nonce]) {
+            revert REQUEST_BORROW_NONCE_USED(_request.wallet, _request.nonce);
+        }
+        s.s_requestBorrowNonceUsed[_request.contractAddress][_request.nonce] = true;
+
+        Loan memory _loan = Loan({
+            positionId: _request.positionId,
+            token: _request.token,
+            principal: _request.amount,
+            repaid: 0,
+            tenureSeconds: _request.tenureSeconds,
+            startTimestamp: block.timestamp,
+            annualRateBps: s.s_interestRate,
+            penaltyRateBps: s.s_penaltyRate,
+            status: LoanStatus.FULFILLED
+        });
+
+        uint256 _loanId = ++s.s_nextLoanId;
+        s.s_loans[_loanId] = _loan;
+        s.s_positionActiveLoanIds[_request.positionId].push(_loanId);
+
+        s._updateVaultBorrows(_loan.token, _loan.principal);
+
+        TokenVault _vault = s.i_tokenVault[_loan.token];
+        _vault.borrow(_request.wallet, _loan.principal);
+
+        emit LoanTaken(
+            _request.positionId, _loanId, _loan.token, _loan.principal, _loan.tenureSeconds, _loan.annualRateBps
+        );
+        return _loanId;
+    }
+    
+    function _verifyBorrowSignature(
+        LibAppStorage.StorageLayout storage s,
+        BorrowRequest calldata _request,
+        bytes calldata _signature
+    ) internal view {
+        if (s.s_requestBorrowSigner == address(0)) {
+            revert REQUEST_BORROW_SIGNER_NOT_SET();
+        }
+
+        bytes32 messageHash = keccak256(
+            abi.encodePacked(
+                _request.action,
+                _request.positionId,
+                _request.token,
+                _request.amount,
+                _request.tenureSeconds,
+                _request.sourceChainId,
+                _request.targetChainId,
+                _request.nonce,
+                _request.contractAddress,
+                _request.wallet
+            )
+        );
+        bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(messageHash);
+        address recoveredSigner = ECDSA.recover(ethSignedMessageHash, _signature);
+
+        if (recoveredSigner != s.s_requestBorrowSigner) {
+            revert REQUEST_BORROW_INVALID_SIGNATURE(recoveredSigner);
+        }
     }
 
     function _repayLoanFor(LibAppStorage.StorageLayout storage s, uint256 _positionId, uint256 _loanId, uint256 _amount)

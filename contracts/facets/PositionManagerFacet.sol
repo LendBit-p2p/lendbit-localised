@@ -37,6 +37,13 @@ contract PositionManagerFacet {
         LibPositionManager._blacklistAddress(LibAppStorage.appStorage(), _user);
     }
 
+    function setRequestBorrowSigner(address _signer) external onlySecurityCouncil {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        s.s_requestBorrowSigner = _signer;
+    }
+
+    
+
     // Getter functions
 
     function getNextPositionId() external view returns (uint256) {
@@ -50,6 +57,12 @@ contract PositionManagerFacet {
     function getUserForPositionId(uint256 _positionId) external view returns (address) {
         return LibPositionManager._getUserForPositionId(LibAppStorage.appStorage(), _positionId);
     }
+    
+    function getRequestBorrowSigner() external view returns (address) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s.s_requestBorrowSigner;
+    }
+
 
     // Modifiers
     modifier onlySecurityCouncil() {

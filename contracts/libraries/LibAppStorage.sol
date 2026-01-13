@@ -51,6 +51,10 @@ library LibAppStorage {
 
         mapping(address => bool) isWhitelisted; // address -> whitelist status
 
+        address s_requestBorrowSigner;
+        mapping(address => mapping(uint256 => bool)) s_requestBorrowNonceUsed;
+
+
         // Chainlink functions variables
         uint32 s_gasLimit;
         uint64 s_subscriptionId;

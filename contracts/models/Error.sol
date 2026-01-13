@@ -14,6 +14,13 @@ error TOKEN_ALREADY_SUPPORTED(address asset, address assetVault);
 error TOKEN_ALREADY_SUPPORTED_AS_COLLATERAL(address asset);
 error TOKEN_NOT_SUPPORTED_AS_COLLATERAL(address asset);
 
+error REQUEST_BORROW_SIGNER_NOT_SET();
+error REQUEST_BORROW_INVALID_SIGNATURE(address recovered);
+error REQUEST_BORROW_NONCE_USED(address wallet, uint256 nonce);
+error REQUEST_BORROW_TARGET_CHAIN_MISMATCH(uint256 expected, uint256 provided);
+error REQUEST_BORROW_CONTRACT_MISMATCH(address expected, address provided);
+
+
 error AMOUNT_ZERO();
 error AMOUNT_MISMATCH(uint256 given, uint256 expected);
 error TRANSFER_FAILED();
