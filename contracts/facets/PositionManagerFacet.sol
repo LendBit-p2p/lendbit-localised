@@ -37,6 +37,17 @@ contract PositionManagerFacet {
         LibPositionManager._blacklistAddress(LibAppStorage.appStorage(), _user);
     }
 
+    function setRequestSigner(address _signer) external onlySecurityCouncil {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        s.s_requestSigner = _signer;
+    }
+
+    function getRequestSigner() external view returns (address) {
+        LibAppStorage.StorageLayout storage s = LibAppStorage.appStorage();
+        return s.s_requestSigner;
+    }
+
+
     // Getter functions
 
     function getNextPositionId() external view returns (uint256) {

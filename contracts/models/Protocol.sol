@@ -24,6 +24,17 @@ struct VaultConfiguration {
     uint256 lastUpdated; // timestamp
 }
 
+struct RepayRequest {
+    string action;
+    uint256 loanId;
+    uint256 amount;
+    uint256 sourceChainId;
+    uint256 targetChainId;
+    uint256 nonce;
+    address contractAddress;
+}
+
+
 enum LoanStatus {
     REJECTED,
     FULFILLED,

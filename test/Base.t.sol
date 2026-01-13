@@ -15,6 +15,7 @@ import "../contracts/facets/PositionManagerFacet.sol";
 import "../contracts/facets/VaultManagerFacet.sol";
 import "../contracts/facets/YieldStrategyFacet.sol";
 import "../contracts/Diamond.sol";
+import {VaultConfiguration, RepayRequest} from "../contracts/models/Protocol.sol";
 
 import {Test} from "forge-std/Test.sol";
 
@@ -49,6 +50,10 @@ contract Base is Test, IDiamondCut {
     address nonAdmin = mkaddr("nonAdmin");
 
     uint16 baseTokenLTV = 8000;
+    uint256 internal constant REQUEST_SIGNER_PRIVATE_KEY = 0xA11CE;
+    address internal requestSignerAddress = vm.addr(REQUEST_SIGNER_PRIVATE_KEY);
+    uint256 internal repayRequestNonce;
+    string internal constant REPAY_ACTION = "REPAY_LOAN";
 
     VaultConfiguration defaultConfig = VaultConfiguration({
         totalDeposits: 0,
@@ -164,6 +169,7 @@ contract Base is Test, IDiamondCut {
         whitelistUserAddresses();
         _setupInitialCollateralTokens();
         protocolF.setInterestRate(2000, 500);
+        positionManagerF.setRequestSigner(requestSignerAddress);
     }
 
     function _setupInitialCollateralTokens() internal virtual {
@@ -207,6 +213,66 @@ contract Base is Test, IDiamondCut {
     function mintTokenTo(address _token, address _user, uint256 _amount) internal {
         ERC20Mock token = ERC20Mock(_token);
         token.mint(_user, _amount);
+    }
+
+    function executeRepayLoan(uint256 _loanId, uint256 _amount) internal returns (uint256) {
+        (RepayRequest memory request, bytes memory signature) = buildRepayRequest(_loanId, _amount);
+        return protocolF.repayLoan(request, signature);
+    }
+
+    function buildRepayRequest(uint256 _loanId, uint256 _amount)
+        internal
+        returns (RepayRequest memory request, bytes memory signature)
+    {
+        request = createRepayRequest(_loanId, _amount);
+        signature = _signRepayRequest(request);
+    }
+
+    function createRepayRequest(uint256 _loanId, uint256 _amount)
+        internal
+        returns (RepayRequest memory request)
+    {
+        request = RepayRequest({
+            action: REPAY_ACTION,
+            loanId: _loanId,
+            amount: _amount,
+            sourceChainId: block.chainid,
+            targetChainId: block.chainid,
+            nonce: ++repayRequestNonce,
+            contractAddress: address(protocolF)
+        });
+    }
+
+    function _signRepayRequest(RepayRequest memory request) internal returns (bytes memory signature) {
+        signature = signRepayRequestWithKey(request, REQUEST_SIGNER_PRIVATE_KEY);
+    }
+
+    function signRepayRequestWithKey(RepayRequest memory request, uint256 privateKey)
+        internal
+        returns (bytes memory signature)
+    {
+        bytes32 digest = _repayRequestDigest(request);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
+        signature = abi.encodePacked(r, s, v);
+    }
+
+    function _repayRequestDigest(RepayRequest memory request) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                keccak256(
+                    abi.encode(
+                        request.action,
+                        request.loanId,
+                        request.amount,
+                        request.sourceChainId,
+                        request.targetChainId,
+                        request.nonce,
+                        request.contractAddress
+                    )
+                )
+            )
+        );
     }
 
     function createVaultAndFund(uint256 _amount) internal {

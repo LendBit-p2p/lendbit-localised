@@ -840,20 +840,17 @@ contract ProtocolTest is Base {
         vm.startPrank(user1);
         uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
 
-        uint256 _vaultBalance = token4.balanceOf(vault);
-
         vm.warp(block.timestamp + (365 days / 2)); // Warp half the tenure to accrue some interest
 
         uint256 _debtBeforeRepay = protocolF.getOutstandingDebtForLoan(_loanId);
 
-        // Mint tokens to user1 for repayment
-        token4.mint(user1, _debtBeforeRepay);
-        token4.approve(address(diamond), _debtBeforeRepay);
-
-        // Repay full amount
         uint256 remainingDebt = protocolF.repayLoanFor(_positionId, _loanId, _debtBeforeRepay);
+
         assertEq(remainingDebt, 0, "Debt should be zero after full repayment");
-        assertEq(token4.balanceOf(vault), _vaultBalance + _debtBeforeRepay);
+        assertEq(protocolF.getOutstandingDebtForLoan(_loanId), 0, "Outstanding debt should be cleared");
+
+        (, , , , , , , , , uint8 status) = protocolF.getLoanDetails(_loanId);
+        assertEq(status, uint8(LoanStatus.REPAID), "Loan should be marked repaid");
         vm.stopPrank();
     }
 
@@ -868,19 +865,19 @@ contract ProtocolTest is Base {
         uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 30 days);
         vm.warp(block.timestamp + 15 days); // Warp half the tenure to accrue some interest
 
-        // Mint tokens to user1 for partial repayment
         uint256 partialRepay = borrowAmount;
-        token4.mint(user1, partialRepay);
-        token4.approve(address(diamond), partialRepay);
-
         uint256 remainingDebt = protocolF.repayLoanFor(_positionId, _loanId, partialRepay);
 
         assertGt(remainingDebt, 0, "Debt should remain after partial repayment");
         assertLt(remainingDebt, borrowAmount, "Debt should be less than initial borrow");
+
+        (, , , uint256 repaid, , , , , , uint8 status) = protocolF.getLoanDetails(_loanId);
+        assertEq(repaid, partialRepay, "Partial repayment should be tracked");
+        assertEq(status, uint8(LoanStatus.FULFILLED), "Loan should remain active after partial repay");
         vm.stopPrank();
     }
 
-    function testRepayLoanForFailsForInsufficientAllowance() public {
+    function testRepayLoanForFailsForInactiveLoan() public {
         createVaultAndFund(1000000e18);
         uint256 collateralAmount = 10000 * 1e18;
         uint256 borrowAmount = 1000 * 1e6;
@@ -889,32 +886,35 @@ contract ProtocolTest is Base {
 
         vm.startPrank(user1);
         uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 30 days);
+        vm.warp(block.timestamp + 15 days);
 
-        // Mint tokens but do not approve
-        token4.mint(user1, borrowAmount);
+        uint256 _debtBeforeRepay = protocolF.getOutstandingDebtForLoan(_loanId);
+        protocolF.repayLoanFor(_positionId, _loanId, _debtBeforeRepay);
 
-        vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_ALLOWANCE.selector));
-        protocolF.repayLoanFor(_positionId, _loanId, borrowAmount);
+        vm.expectRevert(abi.encodeWithSelector(INACTIVE_LOAN.selector));
+        protocolF.repayLoanFor(_positionId, _loanId, 1);
         vm.stopPrank();
     }
 
-    function testRepayLoanForFailsForInsufficientBalance() public {
+    function testRepayLoanForFailsForInvalidPositionId() public {
         createVaultAndFund(1000000e18);
         uint256 collateralAmount = 10000 * 1e18;
         uint256 borrowAmount = 1000 * 1e6;
 
-        uint256 _positionId = depositCollateralFor(user1, address(token1), collateralAmount);
+        uint256 positionOwner = depositCollateralFor(user1, address(token1), collateralAmount);
+        uint256 otherPosition = depositCollateralFor(user2, address(token1), collateralAmount);
 
         vm.startPrank(user1);
         uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
-        token4.transfer(user2, borrowAmount); // reduce token balance for user1
-
-        // Approve but do not mint enough tokens
-        token4.approve(address(diamond), borrowAmount);
-
-        vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_BALANCE.selector));
-        protocolF.repayLoanFor(_positionId, _loanId, borrowAmount);
         vm.stopPrank();
+
+        vm.expectRevert(abi.encodeWithSelector(NOT_LOAN_OWNER.selector, otherPosition));
+        protocolF.repayLoanFor(otherPosition, _loanId, borrowAmount);
+
+        // ensure correct position can still repay
+        uint256 debtBeforeRepay = protocolF.getOutstandingDebtForLoan(_loanId);
+        uint256 remaining = protocolF.repayLoanFor(positionOwner, _loanId, debtBeforeRepay);
+        assertEq(remaining, 0, "Loan should repay when called with valid position");
     }
 
     function testRepayLoanForMoreThanDebt() public {
@@ -927,17 +927,17 @@ contract ProtocolTest is Base {
         vm.startPrank(user1);
         uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
 
-        // Mint and approve more than debt
-        token4.mint(user1, borrowAmount * 2);
-        token4.approve(address(diamond), borrowAmount * 2);
-        uint256 balanceBeforeRepay = token4.balanceOf(user1);
         vm.warp(block.timestamp + 30 days); // Warp to accrue some interest
 
         uint256 debtBeforeRepay = protocolF.getOutstandingDebtForLoan(_loanId);
         uint256 remainingDebt = protocolF.repayLoanFor(_positionId, _loanId, borrowAmount * 2);
 
         assertEq(remainingDebt, 0, "Debt should be zero after over-repayment");
-        assertEq(token4.balanceOf(user1), balanceBeforeRepay - debtBeforeRepay);
+
+        (, , , uint256 repaid, , , , , , uint8 status) = protocolF.getLoanDetails(_loanId);
+        assertEq(repaid, debtBeforeRepay, "Repay amount should be capped at outstanding debt");
+        assertEq(status, uint8(LoanStatus.REPAID), "Loan should be marked repaid");
+
         vm.stopPrank();
     }
 
@@ -951,20 +951,18 @@ contract ProtocolTest is Base {
         vm.startPrank(user1);
         uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
 
-        uint256 _vaultBalance = token4.balanceOf(vault);
-
         vm.warp(block.timestamp + (365 days / 2)); // Warp half the tenure to accrue some interest
 
         uint256 _debtBeforeRepay = protocolF.getOutstandingDebtForLoan(_loanId);
 
-        // Mint tokens to user1 for repayment
-        token4.mint(user1, _debtBeforeRepay);
-        token4.approve(address(diamond), _debtBeforeRepay);
+        uint256 remainingDebt = executeRepayLoan(_loanId, _debtBeforeRepay);
 
-        // Repay full amount
-        uint256 remainingDebt = protocolF.repayLoan(_loanId, _debtBeforeRepay);
         assertEq(remainingDebt, 0, "Debt should be zero after full repayment");
-        assertEq(token4.balanceOf(vault), _vaultBalance + _debtBeforeRepay);
+        assertEq(protocolF.getOutstandingDebtForLoan(_loanId), 0, "Outstanding debt should be cleared");
+
+        (, , , uint256 repaid, , , , , , uint8 status) = protocolF.getLoanDetails(_loanId);
+        assertEq(repaid, _debtBeforeRepay, "Repayment amount should match outstanding debt");
+        assertEq(status, uint8(LoanStatus.REPAID), "Loan should be marked repaid");
         vm.stopPrank();
     }
 
@@ -979,19 +977,19 @@ contract ProtocolTest is Base {
         uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 30 days);
         vm.warp(block.timestamp + 15 days); // Warp half the tenure to accrue some interest
 
-        // Mint tokens to user1 for partial repayment
         uint256 partialRepay = borrowAmount;
-        token4.mint(user1, partialRepay);
-        token4.approve(address(diamond), partialRepay);
-
-        uint256 remainingDebt = protocolF.repayLoan(_loanId, partialRepay);
+        uint256 remainingDebt = executeRepayLoan(_loanId, partialRepay);
 
         assertGt(remainingDebt, 0, "Debt should remain after partial repayment");
         assertLt(remainingDebt, borrowAmount, "Debt should be less than initial borrow");
+
+        (, , , uint256 repaid, , , , , , uint8 status) = protocolF.getLoanDetails(_loanId);
+        assertEq(repaid, partialRepay, "Partial repayment should be tracked");
+        assertEq(status, uint8(LoanStatus.FULFILLED), "Loan should remain active after partial repay");
         vm.stopPrank();
     }
 
-    function testRepayLoanFailsForInsufficientAllowance() public {
+    function testRepayLoanFailsForInvalidSignature() public {
         createVaultAndFund(1000000e18);
         uint256 collateralAmount = 10000 * 1e18;
         uint256 borrowAmount = 1000 * 1e6;
@@ -1001,15 +999,17 @@ contract ProtocolTest is Base {
         vm.startPrank(user1);
         uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 30 days);
 
-        // Mint tokens but do not approve
-        token4.mint(user1, borrowAmount);
+        RepayRequest memory request = createRepayRequest(_loanId, borrowAmount);
+        uint256 invalidKey = REQUEST_SIGNER_PRIVATE_KEY + 1;
+        address invalidSigner = vm.addr(invalidKey);
+        bytes memory invalidSignature = signRepayRequestWithKey(request, invalidKey);
 
-        vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_ALLOWANCE.selector));
-        protocolF.repayLoan(_loanId, borrowAmount);
+        vm.expectRevert(abi.encodeWithSelector(REQUEST_INVALID_SIGNATURE.selector, invalidSigner));
+        protocolF.repayLoan(request, invalidSignature);
         vm.stopPrank();
     }
 
-    function testRepayLoanFailsForInsufficientBalance() public {
+    function testRepayLoanFailsForTargetChainMismatch() public {
         createVaultAndFund(1000000e18);
         uint256 collateralAmount = 10000 * 1e18;
         uint256 borrowAmount = 1000 * 1e6;
@@ -1018,13 +1018,19 @@ contract ProtocolTest is Base {
 
         vm.startPrank(user1);
         uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
-        token4.transfer(user2, borrowAmount); // reduce token balance for user1
 
-        // Approve but do not mint enough tokens
-        token4.approve(address(diamond), borrowAmount);
+        RepayRequest memory request = createRepayRequest(_loanId, borrowAmount);
+        request.targetChainId = block.chainid + 1;
+        bytes memory signature = signRepayRequestWithKey(request, REQUEST_SIGNER_PRIVATE_KEY);
 
-        vm.expectRevert(abi.encodeWithSelector(INSUFFICIENT_BALANCE.selector));
-        protocolF.repayLoan(_loanId, borrowAmount);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                REQUEST_REPAY_TARGET_CHAIN_MISMATCH.selector,
+                block.chainid,
+                request.targetChainId
+            )
+        );
+        protocolF.repayLoan(request, signature);
         vm.stopPrank();
     }
 
@@ -1038,17 +1044,16 @@ contract ProtocolTest is Base {
         vm.startPrank(user1);
         uint256 _loanId = protocolF.takeLoan(address(token4), borrowAmount, 365 days);
 
-        // Mint and approve more than debt
-        token4.mint(user1, borrowAmount * 2);
-        token4.approve(address(diamond), borrowAmount * 2);
-        uint256 balanceBeforeRepay = token4.balanceOf(user1);
         vm.warp(block.timestamp + 30 days); // Warp to accrue some interest
 
         uint256 debtBeforeRepay = protocolF.getOutstandingDebtForLoan(_loanId);
-        uint256 remainingDebt = protocolF.repayLoan(_loanId, borrowAmount * 2);
+        uint256 remainingDebt = executeRepayLoan(_loanId, borrowAmount * 2);
 
         assertEq(remainingDebt, 0, "Debt should be zero after over-repayment");
-        assertEq(token4.balanceOf(user1), balanceBeforeRepay - debtBeforeRepay);
+
+        (, , , uint256 repaid, , , , , , uint8 status) = protocolF.getLoanDetails(_loanId);
+        assertEq(repaid, debtBeforeRepay, "Repayment should be capped at outstanding debt");
+        assertEq(status, uint8(LoanStatus.REPAID), "Loan should be marked repaid");
         vm.stopPrank();
     }
 
@@ -1070,7 +1075,7 @@ contract ProtocolTest is Base {
         token4.approve(address(diamond), borrowAmount);
 
         vm.expectRevert(abi.encodeWithSelector(NOT_LOAN_OWNER.selector, _positionId));
-        protocolF.repayLoan(_loanId, borrowAmount);
+        executeRepayLoan(_loanId, borrowAmount);
         vm.stopPrank();
     }
 
@@ -1458,7 +1463,7 @@ contract ProtocolTest is Base {
         uint256 loanId1 = protocolF.takeLoan(address(token4), borrowAmount1, 365 days);
         uint256 loanId2 = protocolF.takeLoan(address(token4), borrowAmount2, 365 days);
         token4.approve(address(diamond), borrowAmount1);
-        protocolF.repayLoan(loanId1, borrowAmount1);
+        executeRepayLoan(loanId1, borrowAmount1);
         vm.stopPrank();
 
         vm.startPrank(user2);
@@ -1467,7 +1472,7 @@ contract ProtocolTest is Base {
         uint256 loanId5 = protocolF.takeLoan(address(token4), borrowAmount1, 365 days);
 
         token4.approve(address(diamond), borrowAmount2);
-        protocolF.repayLoan(loanId4, borrowAmount2);
+        executeRepayLoan(loanId4, borrowAmount2);
         vm.stopPrank();
 
         uint256[] memory activeLoanIds = protocolF.getActiveLoanIds();
@@ -1489,7 +1494,7 @@ contract ProtocolTest is Base {
         vm.startPrank(user1);
         uint256 loanId = protocolF.takeLoan(address(token4), borrowAmount, tenure);
         token4.approve(address(diamond), borrowAmount / 2);
-        protocolF.repayLoan(loanId, borrowAmount / 2);
+        executeRepayLoan(loanId, borrowAmount / 2);
         vm.stopPrank();
         vm.warp(block.timestamp + 365 days);
 

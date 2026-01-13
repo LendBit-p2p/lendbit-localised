@@ -93,10 +93,7 @@ library LibProtocol {
         s.s_positionActiveLoanIds[_positionId].push(_loanId);
 
         s._updateVaultBorrows(_loan.token, _loan.principal);
-
-        TokenVault _vault = s.i_tokenVault[_loan.token];
-        _vault.borrow(msg.sender, _loan.principal);
-
+       
         emit LoanTaken(_positionId, _loanId, _loan.token, _loan.principal, _loan.tenureSeconds, _loan.annualRateBps);
         return _loanId;
     }
@@ -111,8 +108,6 @@ library LibProtocol {
 
         uint256 _loanDebt = _outstandingBalance(_loan, block.timestamp);
         if (_loanDebt == 0) revert NO_OUTSTANDING_DEBT(_positionId, _loan.token);
-
-        _allowanceAndBalanceCheck(_loan.token, _amount);
 
         if (_amount > _loanDebt) {
             _amount = _loanDebt;
@@ -130,19 +125,59 @@ library LibProtocol {
 
         s._updateVaultRepays(_loan.token, _amount);
 
-        bool _success = ERC20(_loan.token).transferFrom(msg.sender, address(s.i_tokenVault[_loan.token]), _amount);
-        if (!_success) revert TRANSFER_FAILED();
-
         emit LoanRepayment(_positionId, _loanId, _loan.token, _amount);
         return _loanDebt - _amount;
     }
 
-    function _repayLoan(LibAppStorage.StorageLayout storage s, uint256 _loanId, uint256 _amount)
+    function _repayLoan(LibAppStorage.StorageLayout storage s, RepayRequest calldata _request, bytes calldata _signature)
         internal
         returns (uint256)
     {
+        _verifyRepayRequest(s, _request, _signature);
+
         uint256 _positionId = _positionIdCheck(s);
-        return _repayLoanFor(s, _positionId, _loanId, _amount);
+        return _repayLoanFor(s, _positionId, _request.loanId, _request.amount);
+    }
+
+    function _verifyRepayRequest(
+        LibAppStorage.StorageLayout storage s,
+        RepayRequest calldata _request,
+        bytes calldata _signature
+    ) internal {
+        if (s.s_requestSigner == address(0)) revert REQUEST_SIGNER_NOT_SET();
+
+        bytes32 _hash = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                keccak256(
+                    abi.encode(
+                        _request.action,
+                        _request.loanId,
+                        _request.amount,
+                        _request.sourceChainId,
+                        _request.targetChainId,
+                        _request.nonce,
+                        _request.contractAddress
+                    )
+                )
+            )
+        );
+
+        address _recovered = ecrecover(_hash, uint8(_signature[64]), bytes32(_signature[0:32]), bytes32(_signature[32:64]));
+        if (_recovered != s.s_requestSigner) revert REQUEST_INVALID_SIGNATURE(_recovered);
+
+        if (s.s_requestRepayNonceUsed[_recovered][_request.nonce]) {
+            revert REQUEST_REPAY_NONCE_USED(_recovered, _request.nonce);
+        }
+        s.s_requestRepayNonceUsed[_recovered][_request.nonce] = true;
+
+        if (_request.targetChainId != block.chainid) {
+            revert REQUEST_REPAY_TARGET_CHAIN_MISMATCH(block.chainid, _request.targetChainId);
+        }
+
+        if (_request.contractAddress != address(this)) {
+            revert REQUEST_REPAY_CONTRACT_MISMATCH(address(this), _request.contractAddress);
+        }
     }
 
     function _borrow(LibAppStorage.StorageLayout storage s, address _token, uint256 _amount)
